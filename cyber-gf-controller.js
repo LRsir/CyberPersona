@@ -11,12 +11,22 @@ const {
   setDebugEnabled,
   isDebugEnabled,
   storeLastGeneratedAudio,
-  describeStateLevel
+  storeLastGeneratedImage,
+  updateSessionStartTime
 } = require('./cyber-gf-state');
-const { buildInitialState, validateInitialProfile, resolveInitialProfilePayload } = require('./cyber-gf-profile');
-const { validateTurnOutput, createFallbackTurnOutput, normalizeTurnStateDelta } = require('./cyber-gf-turn');
-const { generateTtsAudio, generateFromLastTurn, probeTtsChain, sanitizeNaturalStylePrompt, normalizeTaggedTtsText } = require('./cyber-gf-tts');
-const { buildInitialProfileAgentPrompt, buildTurnAgentPrompt } = require('./cyber-gf-prompts');
+const { buildInitialState, validateInitialProfile } = require('./cyber-gf-profile');
+const { validateTurnOutput, createFallbackTurnOutput } = require('./cyber-gf-turn');
+const { generateTtsAudio, generateFromLastTurn, probeTtsChain } = require('./cyber-gf-tts');
+const { generateImageWithRetry, editImageWithRetry } = require('./cyber-gf-image');
+const { buildInitialProfileAgentPrompt, buildTurnAgentPrompt, buildDebugTurnAgentPrompt } = require('./cyber-gf-prompts');
+const { createGamificationSystem } = require('./cyber-gf-gamification');
+const { createImageFileManager } = require('./cyber-gf-image-optimizer');
+
+function getImageFileManager() {
+  const cfg = getConfig();
+  const dataDir = require('path').dirname(require('path').resolve(cfg.stateFile));
+  return createImageFileManager(dataDir);
+}
 
 function getHistoryPath() {
   return getConfig().historyFile;
@@ -48,59 +58,39 @@ function getRecentContext(limit = 4) {
 }
 
 function formatStatus(state) {
-  const fmt = (label, value) => `${label}: ${value} (${describeStateLevel(value)})`;
   return [
     '💗 赛博女友状态',
     '========================',
     `已开启: ${state.mode.enabled ? '是' : '否'}`,
     `人设摘要: ${state.profile.profileSummary || '暂无'}`,
     `关系摘要: ${state.revealedMemory.lastSummary || '暂无'}`,
-    fmt('关系温度', state.dynamicState.relationshipWarmth),
-    fmt('安全感', state.dynamicState.safety),
-    fmt('信任感', state.dynamicState.trust),
-    fmt('主动靠近意愿', state.dynamicState.approachDesire),
-    fmt('暴露意愿', state.dynamicState.vulnerabilityWillingness),
-    fmt('语音自然度', state.dynamicState.voiceEase),
+    `关系温度: ${state.dynamicState.relationshipWarmth}`,
+    `安全感: ${state.dynamicState.safety}`,
+    `信任感: ${state.dynamicState.trust}`,
+    `主动靠近意愿: ${state.dynamicState.approachDesire}`,
+    `暴露意愿: ${state.dynamicState.vulnerabilityWillingness}`,
+    `语音自然度: ${state.dynamicState.voiceEase}`,
     `最近未解情绪: ${state.shortTermState.unresolvedEmotion}`,
     '========================'
   ].join('\n');
 }
 
-function buildTurnDebugInfo(turnOutput) {
+function buildTurnDebugInfo(turnOutput, forceDebug = false) {
   const state = loadState();
   const cfg = getConfig();
-  if (!(isDebugEnabled(state) || cfg.debug.enabled)) return null;
+  if (!(forceDebug || isDebugEnabled(state) || cfg.debug.enabled)) return null;
   const lines = ['[cyber-gf debug]'];
   lines.push(`currentEmotion: ${turnOutput.currentEmotion}`);
   lines.push(`sendVoiceNow: ${turnOutput.sendVoiceNow ? 'true' : 'false'}`);
-  if (cfg.debug.showTtsControls) {
+  lines.push(`sendImageNow: ${turnOutput.sendImageNow ? 'true' : 'false'}`);
+  if (turnOutput.sendImageNow && turnOutput.imagePrompt) {
+    lines.push(`imagePrompt: ${turnOutput.imagePrompt}`);
+  }
+  if (forceDebug || cfg.debug.showTtsControls) {
     lines.push(`taggedTtsText: ${turnOutput.taggedTtsText}`);
     lines.push(`naturalStylePrompt: ${turnOutput.naturalStylePrompt}`);
   }
   return lines.join('\n');
-}
-
-function normalizeTurnPayloadForRuntime(turnOutput, userMessage = '') {
-  const text = String(userMessage || '').trim();
-  const isSleepLike = /睡|晚安|哄我睡|陪我睡/.test(text);
-
-  const next = {
-    ...turnOutput,
-    taggedTtsText: normalizeTaggedTtsText(turnOutput.taggedTtsText || turnOutput.visibleText || ''),
-    naturalStylePrompt: ''
-  };
-
-  if (!next.taggedTtsText && next.visibleText) {
-    next.taggedTtsText = next.visibleText.trim();
-  }
-
-  if (isSleepLike && next.taggedTtsText && !/^[（(\[]/.test(next.taggedTtsText)) {
-    next.taggedTtsText = `（轻声，温柔）${next.taggedTtsText}`;
-  }
-
-  next.naturalStylePrompt = sanitizeNaturalStylePrompt(next.naturalStylePrompt || '');
-  next.naturalStylePrompt = '';
-  return next;
 }
 
 function setCyberGfDebug(flag) {
@@ -194,19 +184,36 @@ function getTelegramVoiceSendPayload(target = 'telegram:8121382159') {
 
 function buildUnifiedDelivery(turnOutput, options = {}) {
   const state = loadState();
-  const debugText = buildTurnDebugInfo(turnOutput);
+  const debugText = buildTurnDebugInfo(turnOutput, options.forceDebug);
   const target = options.target || 'telegram:8121382159';
   const audio = state?.runtimeCache?.lastGeneratedAudio;
-  const voiceAllowed = turnOutput.sendVoiceNow && options.voiceFailed !== true;
-  const voicePayload = voiceAllowed ? buildVoiceSendPayloadFromAudio(audio, target) : null;
-
+  const voicePayload = turnOutput.sendVoiceNow ? buildVoiceSendPayloadFromAudio(audio, target) : null;
+  const image = state?.runtimeCache?.lastGeneratedImage;
+  const imagePayload = turnOutput.sendImageNow && image?.filepath ? {
+    action: 'send',
+    channel: 'telegram',
+    target,
+    targets: [target],
+    accountId: 'default',
+    dryRun: false,
+    message: turnOutput.imageCaption || '',
+    media: image.filepath,
+    filename: image.filename || '',
+    caption: turnOutput.imageCaption || '',
+    asVoice: false,
+    silent: false,
+    bestEffort: false
+  } : null;
   return {
-    mode: voicePayload ? 'voice_note' : 'text_reply',
+    mode: voicePayload ? 'voice_note' : (imagePayload ? 'image_post' : 'text_reply'),
     text: debugText ? `${turnOutput.visibleText}\n\n${debugText}` : turnOutput.visibleText,
     sendVoiceNow: !!turnOutput.sendVoiceNow,
+    sendImageNow: !!turnOutput.sendImageNow,
     voicePayload,
+    imagePayload,
+    imageCaption: turnOutput.imageCaption || '',
     shouldReplyInChat: !voicePayload,
-    shouldNoReplyAfterMessageSend: !!voicePayload,
+    shouldNoReplyAfterMessageSend: !!(voicePayload || imagePayload),
     debugText: debugText || null
   };
 }
@@ -216,7 +223,10 @@ function buildStartDelivery(openingMessage) {
     mode: 'text_reply',
     text: openingMessage,
     sendVoiceNow: false,
+    sendImageNow: false,
     voicePayload: null,
+    imagePayload: null,
+    imageCaption: '',
     shouldReplyInChat: true,
     shouldNoReplyAfterMessageSend: false,
     debugText: null
@@ -281,7 +291,7 @@ function buildStartPayload() {
   return {
     prompt: buildInitialProfileAgentPrompt(),
     envPath: ENV_PATH,
-    note: '让 agent 使用这个 prompt 生成 InitialStatePayload，然后调用 applyInitialStatePayload(payload) 即可落盘。'
+    note: '让 agent 使用这个 prompt 生成 InitialStatePayload，然后调用 applyInitialStatePayload(payload) 即可落盘。落盘后必须调用 generateReferencePhoto() 生成人物参考照片，用于后续图片的人物一致性。'
   };
 }
 
@@ -399,6 +409,10 @@ function readJsonArg(fileOrJson) {
 }
 
 function buildTurnPayload(userMessage) {
+  // 检测 debug+ 前缀
+  if (userMessage && userMessage.startsWith('debug+')) {
+    return buildDebugTurnPayload(userMessage.slice(6).trim());
+  }
   const turnContext = buildTurnContextPayload(userMessage);
   if (!turnContext) return null;
   return {
@@ -409,17 +423,63 @@ function buildTurnPayload(userMessage) {
   };
 }
 
-function applyInitialStatePayload(initialPayload, options = {}) {
-  const resolved = resolveInitialProfilePayload(initialPayload, options);
-  if (!resolved.ok) {
-    throw new Error(resolved.reason || 'Initial profile payload invalid');
+/**
+ * Build a debug turn payload. Ignores character constraints,
+ * unconditionally executes the debug command, and forces debug display.
+ */
+function buildDebugTurnPayload(debugCommand) {
+  const turnContext = buildTurnContextPayload(debugCommand);
+  if (!turnContext) return null;
+  return {
+    prompt: buildDebugTurnAgentPrompt(turnContext, debugCommand),
+    context: turnContext,
+    envPath: ENV_PATH,
+    isDebugCommand: true,
+    debugCommand,
+    note: '这是 debug+ 调试指令。agent 必须无条件执行，生成 TurnResultPayload 后调用 applyTurnResultPayload(payload, userMessage) 落盘。回复必须包含调试参数显示。'
+  };
+}
+
+function applyInitialStatePayload(initialPayload) {
+  const validated = validateInitialProfile(initialPayload);
+  if (!validated.ok) {
+    throw new Error(validated.error);
   }
-  let state = buildInitialState(resolved.value);
+  let state = buildInitialState(validated.value);
   state = saveState(state);
   return {
     state,
-    openingMessage: resolved.value.openingMessage,
-    resolution: resolved.resolution || 'as_is'
+    openingMessage: validated.value.openingMessage
+  };
+}
+
+/**
+ * Generate a reference ID photo from the character's appearance description.
+ * This photo is used as the base for all subsequent character images (edit API).
+ */
+async function generateReferencePhoto() {
+  const state = loadState();
+  if (!state) throw new Error('No cyber girlfriend state exists');
+  const appearance = state.profile.appearance;
+  if (!appearance) throw new Error('No appearance description in profile');
+
+  const prompt = `standard portrait photo, head and shoulders, neutral background, looking at camera, ${appearance}`;
+  const image = await generateImageWithRetry(prompt, { size: '1024x1024', quality: 'high' });
+
+  let currentState = loadState();
+  currentState.profile.referencePhotoPath = image.filepath;
+  currentState = saveState(currentState);
+
+  // 记录到图片文件管理器
+  try {
+    const imgManager = getImageFileManager();
+    imgManager.recordImage(image, { scene: 'reference', type: 'generate', prompt, isReference: true });
+  } catch {}
+
+  return {
+    image,
+    state: currentState,
+    referencePhotoPath: image.filepath
   };
 }
 
@@ -428,28 +488,66 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
   if (!validated.ok) {
     throw new Error(validated.error);
   }
-  const runtimeNormalized = normalizeTurnPayloadForRuntime(validated.value, userMessage);
-  const normalized = normalizeTurnStateDelta(runtimeNormalized.stateDelta || {}, userMessage);
-  const output = {
-    ...runtimeNormalized,
-    stateDelta: normalized.stateDelta
-  };
   let state = loadState();
   if (!state) {
     throw new Error('No cyber girlfriend state exists');
   }
   if (userMessage) appendHistory('user', userMessage);
-  appendHistory('assistant', output.visibleText);
-  state = applyTurnResult(state, output);
+  appendHistory('assistant', validated.value.visibleText);
+  state = applyTurnResult(state, validated.value);
   state.mode.enabled = true;
+
+  // 游戏化系统检查
+  let gamificationResult = null;
+  try {
+    const gamification = createGamificationSystem(state);
+    // 记录互动类型
+    const interactionType = validated.value.sendVoiceNow ? 'voice_message'
+      : validated.value.sendImageNow ? 'photo_share'
+      : 'daily_chat';
+    gamification.recordInteraction(interactionType);
+    // 检查成就解锁
+    gamificationResult = gamification.checkAll();
+    // 回写状态（gamification 系统直接修改了 state 对象）
+    state = gamification.state;
+  } catch (err) {
+    console.error('[cyber-gf gamification] error:', err.message);
+  }
+
   state = saveState(state);
+  // debug+ 指令强制显示调试参数
+  const isDebugCmd = userMessage && userMessage.startsWith('debug+');
   return {
     state,
-    turnOutput: output,
-    eventType: normalized.eventType,
-    deltaBudget: normalized.budget,
-    debugText: buildTurnDebugInfo(output)
+    turnOutput: validated.value,
+    debugText: buildTurnDebugInfo(validated.value, isDebugCmd),
+    gamification: gamificationResult
   };
+}
+
+/**
+ * Generate a character image. Uses edit API with reference photo if available,
+ * otherwise falls back to generate API. Ensures visual consistency.
+ */
+async function generateCharacterImage(imagePrompt) {
+  const state = loadState();
+  const refPath = state?.profile?.referencePhotoPath;
+  const imgManager = getImageFileManager();
+  let image;
+
+  if (refPath && fs.existsSync(refPath)) {
+    try {
+      image = await editImageWithRetry(imagePrompt, refPath);
+      imgManager.recordImage(image, { scene: 'character', type: 'edit', prompt: imagePrompt });
+      return image;
+    } catch (err) {
+      console.error('[cyber-gf image] edit failed, falling back to generate:', err.message);
+    }
+  }
+
+  image = await generateImageWithRetry(imagePrompt);
+  imgManager.recordImage(image, { scene: 'character', type: 'generate', prompt: imagePrompt });
+  return image;
 }
 
 async function speakLastTurn() {
@@ -468,95 +566,57 @@ async function speakTurnPayload(turnResultPayload) {
   const audio = await generateTtsAudio(validated.value.taggedTtsText, validated.value.naturalStylePrompt);
   const state = loadState();
   if (state) saveState(storeLastGeneratedAudio(state, audio));
-  return audio;
+  let image = null;
+  if (validated.value.sendImageNow && validated.value.imagePrompt) {
+    try {
+      image = await generateCharacterImage(validated.value.imagePrompt);
+      const imgState = loadState();
+      if (imgState) saveState(storeLastGeneratedImage(imgState, image));
+    } catch (err) {
+      console.error('[cyber-gf image] generation failed:', err.message);
+    }
+  }
+  return { audio, image };
 }
 
 async function runTurnResultFlow(turnResultPayload, options = {}) {
   const userMessage = options.userMessage || turnResultPayload.__userMessage || '';
   const applied = applyTurnResultPayload(turnResultPayload, userMessage);
   let audio = null;
-  let voiceError = null;
+  let image = null;
   if (applied.turnOutput.sendVoiceNow) {
+    const result = await speakTurnPayload(applied.turnOutput);
+    audio = result.audio;
+    image = result.image;
+  } else if (applied.turnOutput.sendImageNow && applied.turnOutput.imagePrompt) {
     try {
-      audio = await speakTurnPayload(applied.turnOutput);
+      image = await generateCharacterImage(applied.turnOutput.imagePrompt);
+      const imgState = loadState();
+      if (imgState) saveState(storeLastGeneratedImage(imgState, image));
     } catch (err) {
-      voiceError = err;
+      console.error('[cyber-gf image] generation failed:', err.message);
     }
   }
   const delivery = buildUnifiedDelivery(applied.turnOutput, {
     target: options.target,
-    voiceFailed: !!voiceError
+    forceDebug: userMessage.startsWith('debug+')
   });
   return {
     kind: 'turn_flow',
     applied,
     audio,
-    delivery,
-    voiceError: voiceError ? (voiceError.message || String(voiceError)) : null
+    image,
+    delivery
   };
 }
 
-async function runStartFlow(initialPayload, options = {}) {
-  const applied = applyInitialStatePayload(initialPayload, options);
+async function runStartFlow(initialPayload) {
+  const applied = applyInitialStatePayload(initialPayload);
   return {
     kind: 'start_flow',
     applied,
     delivery: buildStartDelivery(applied.openingMessage)
   };
-}
-
-async function runStartFlowWithRetries(generateInitialPayload, options = {}) {
-  if (typeof generateInitialPayload !== 'function') {
-    throw new Error('generateInitialPayload function is required');
-  }
-
-  const maxAttempts = Number(options.maxAttempts || 3);
-  let lastError = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const payload = await generateInitialPayload({ attempt, maxAttempts, lastError });
-    try {
-      const result = await runStartFlow(payload, { attempt, maxAttempts });
-      return {
-        ...result,
-        attempt,
-        maxAttempts,
-        resolution: result.applied?.resolution || 'as_is'
-      };
-    } catch (err) {
-      lastError = err;
-      const message = err?.message || String(err);
-      const retryable = /severely out of range|invalid/i.test(message);
-
-      if (attempt >= maxAttempts) {
-        const fallbackPayload = {
-          ...payload,
-          dynamicStateInit: {
-            relationshipWarmth: 50,
-            safety: 50,
-            trust: 50,
-            approachDesire: 50,
-            vulnerabilityWillingness: 30,
-            voiceEase: 20
-          }
-        };
-        const fallbackResult = await runStartFlow(fallbackPayload, { attempt, maxAttempts });
-        return {
-          ...fallbackResult,
-          attempt,
-          maxAttempts,
-          resolution: 'fallback_defaults',
-          recoveredFromError: message
-        };
-      }
-
-      if (!retryable) {
-        throw err;
-      }
-    }
-  }
-
-  throw lastError || new Error('Failed to generate initial profile payload');
 }
 
 async function startCyberGfHybrid() {
@@ -576,6 +636,11 @@ async function startCyberGfHybrid() {
       selfCheck
     };
   }
+  // 屏蔽 gateway 长时间运行通知（赛博女友期间）
+  try {
+    const flagPath = require('os').homedir() + '/.hermes/.suppress_gateway_notify';
+    fs.writeFileSync(flagPath, String(Date.now()));
+  } catch {}
   let state = loadState();
   if (!state) {
     return {
@@ -584,6 +649,7 @@ async function startCyberGfHybrid() {
     };
   }
   state = incrementSessionCount(setModeEnabled(state, true));
+  state = updateSessionStartTime(state);
   state = saveState(state);
   return {
     kind: 'restored',
@@ -600,6 +666,11 @@ function exitCyberGfHybrid() {
       visibleText: '现在还没有赛博女友状态。'
     };
   }
+  // 恢复 gateway 通知设置
+  try {
+    const flagPath = require('os').homedir() + '/.hermes/.suppress_gateway_notify';
+    if (fs.existsSync(flagPath)) fs.unlinkSync(flagPath);
+  } catch {}
   const next = saveState(setModeEnabled(state, false));
   return {
     kind: 'exited',
@@ -609,6 +680,11 @@ function exitCyberGfHybrid() {
 }
 
 function breakupCyberGfHybrid() {
+  // 恢复 gateway 通知设置
+  try {
+    const flagPath = require('os').homedir() + '/.hermes/.suppress_gateway_notify';
+    if (fs.existsSync(flagPath)) fs.unlinkSync(flagPath);
+  } catch {}
   clearState();
   const historyPath = getHistoryPath();
   if (fs.existsSync(historyPath)) fs.unlinkSync(historyPath);
@@ -620,10 +696,53 @@ function breakupCyberGfHybrid() {
 
 function getCyberGfStatus() {
   const state = loadState();
+  if (!state) {
+    return {
+      kind: 'status',
+      visibleText: '当前没有赛博女友状态记录。'
+    };
+  }
+
+  // 游戏化状态
+  let gamificationStatus = '';
+  try {
+    const gamification = createGamificationSystem(state);
+    const gStatus = gamification.getStatus();
+    const achievements = gStatus.achievements;
+    const affection = gStatus.affection;
+    const tasks = gStatus.dailyTasks;
+
+    gamificationStatus = [
+      '',
+      '🎮 游戏化状态',
+      '========================',
+      `好感度: ${affection.current.points} (${affection.current.name} ${affection.current.icon}) ${affection.current.progress}%`,
+      `成就: ${achievements.progress.unlocked}/${achievements.progress.total} (${achievements.progress.percentage}%)`,
+      `今日任务: ${tasks.stats.todayCompleted}/${tasks.stats.totalTasks}`,
+      '========================'
+    ].join('\n');
+  } catch {}
+
+  // 图片统计
+  let imageStats = '';
+  try {
+    const imgManager = getImageFileManager();
+    const stats = imgManager.getStats();
+    imageStats = [
+      '',
+      '📸 图片统计',
+      '========================',
+      `总图片: ${stats.total} (${stats.totalSizeMB} MB)`,
+      `参考照片: ${stats.referencePhotos}`,
+      `类型分布: ${JSON.stringify(stats.types)}`,
+      '========================'
+    ].join('\n');
+  } catch {}
+
   return {
     kind: 'status',
     state,
-    visibleText: state ? formatStatus(state) : '当前没有赛博女友状态记录。'
+    visibleText: formatStatus(state) + gamificationStatus + imageStats
   };
 }
 
@@ -679,6 +798,14 @@ async function handleHybridCommand(command, arg = '') {
       state: result.state
     };
   }
+  if (command === 'generate-reference-photo') {
+    const result = await generateReferencePhoto();
+    return {
+      kind: 'reference_photo_generated',
+      visibleText: `参考照片已生成: ${result.referencePhotoPath}`,
+      ...result
+    };
+  }
   if (command === 'apply-turn-payload') {
     const payload = readJsonArg(arg);
     const result = applyTurnResultPayload(payload, payload.__userMessage || '');
@@ -722,6 +849,7 @@ async function main() {
     ['run-turn-flow', 'run-turn-flow'],
     ['turn-payload', 'turn-payload'],
     ['apply-start-payload', 'apply-start-payload'],
+    ['generate-reference-photo', 'generate-reference-photo'],
     ['apply-turn-payload', 'apply-turn-payload'],
     ['fallback-turn', 'fallback-turn']
   ]);
@@ -753,17 +881,17 @@ if (require.main === module) {
 
 module.exports = {
   getStatePayload,
-  normalizeTurnPayloadForRuntime,
   buildStartPayload,
   buildTurnPayload,
   buildVoiceSendPayloadFromAudio,
   buildUnifiedDelivery,
   applyInitialStatePayload,
   applyTurnResultPayload,
+  generateReferencePhoto,
+  generateCharacterImage,
   speakLastTurn,
   speakTurnPayload,
   runStartFlow,
-  runStartFlowWithRetries,
   runTurnResultFlow,
   startCyberGfHybrid,
   exitCyberGfHybrid,

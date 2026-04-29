@@ -1,0 +1,27 @@
+{
+  "images": [
+    {
+      "id": 1,
+      "filename": "0429_234509_standard_portrait_photo__head__0.png",
+      "filepath": "./img-cyber-gf/0429_234509_standard_portrait_photo__head__0.png",
+      "size": 1305311,
+      "scene": "reference",
+      "type": "generate",
+      "prompt": "standard portrait photo, head and shoulders, neutral background, looking at camera, 一位20岁左右的中国女孩，黑色长直发，齐刘海，棕色眼睛，皮肤白皙，身材纤细，穿衣风格偏简约清新，喜欢穿白色T恤和牛仔裤，偶尔戴一副圆框眼镜",
+      "isReference": true,
+      "createdAt": "2026-04-29T15:45:09.518Z"
+    },
+    {
+      "id": 2,
+      "filename": "0430_001251_a_casual_selfie__sitting_on_co_0.png",
+      "filepath": "/tmp/gptimage/0430_001251_a_casual_selfie__sitting_on_co_0.png",
+      "size": 1454986,
+      "scene": "selfie",
+      "type": "edit",
+      "prompt": "casual selfie",
+      "isReference": false,
+      "createdAt": "2026-04-29T16:14:35.028Z"
+    }
+  ],
+  "nextId": 3
+}

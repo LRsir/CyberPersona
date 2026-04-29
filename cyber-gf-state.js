@@ -1,14 +1,7 @@
 const fs = require('fs');
 const { getConfig } = require('./cyber-gf-config');
-const STATE_KEYS = ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase'];
-const STATE_SENSITIVITY = {
-  relationshipWarmth: 1.0,
-  safety: 0.8,
-  trust: 0.7,
-  approachDesire: 0.9,
-  vulnerabilityWillingness: 0.6,
-  voiceEase: 0.5
-};
+const LEVELS = ['low', 'medium', 'high'];
+const DELTAS = new Set(['slight_up', 'slight_down', 'keep']);
 
 function nowIso() {
   return new Date().toISOString();
@@ -37,20 +30,23 @@ function createEmptyState() {
       defenseSummary: '',
       startSummary: '',
       voiceSummary: '',
-      profileSummary: ''
+      appearance: '',
+      profileSummary: '',
+      referencePhotoPath: ''
     },
     dynamicState: {
-      relationshipWarmth: 50,
-      safety: 50,
-      trust: 50,
-      approachDesire: 50,
-      vulnerabilityWillingness: 30,
-      voiceEase: 20
+      relationshipWarmth: 'medium',
+      safety: 'medium',
+      trust: 'medium',
+      approachDesire: 'medium',
+      vulnerabilityWillingness: 'medium',
+      voiceEase: 'low'
     },
     shortTermState: {
       unresolvedEmotion: 'none',
       interactionTrend: 'steady',
-      recentVoicePattern: 'none'
+      recentVoicePattern: 'none',
+      recentImagePattern: 'none'
     },
     revealedMemory: {
       nicknameForUser: null,
@@ -64,6 +60,22 @@ function createEmptyState() {
       debug: {
         enabled: false
       },
+      voiceCount: 0,
+      imageCount: 0,
+      sessionStartTime: '',
+      lastInteractionTime: '',
+      lateNightChat: false,
+      earlyMorningChat: false,
+      longChatSession: false,
+      achievements: [],
+      affectionPoints: 0,
+      dailyTasks: {},
+      collections: {
+        photos: [],
+        voices: [],
+        memories: [],
+        achievements: []
+      },
       lastGeneratedAudio: {
         filename: '',
         filepath: '',
@@ -76,10 +88,19 @@ function createEmptyState() {
         naturalStylePrompt: '',
         currentEmotion: '',
         sendVoiceNow: false,
+        sendImageNow: false,
+        imagePrompt: '',
+        imageCaption: '',
         timestamp: '',
         stateDelta: {},
         shortTermUpdate: {},
         memoryUpdate: {}
+      },
+      lastGeneratedImage: {
+        filename: '',
+        filepath: '',
+        size: 0,
+        createdAt: ''
       }
     }
   };
@@ -110,13 +131,16 @@ function repairState(state) {
       lastTurnTts: {
         ...base.runtimeCache.lastTurnTts,
         ...(state?.runtimeCache?.lastTurnTts || {})
+      },
+      lastGeneratedImage: {
+        ...base.runtimeCache.lastGeneratedImage,
+        ...(state?.runtimeCache?.lastGeneratedImage || {})
       }
     }
   };
 
   for (const key of Object.keys(repaired.dynamicState)) {
-    const value = Number(repaired.dynamicState[key]);
-    repaired.dynamicState[key] = Number.isFinite(value) ? clampStateValue(value) : base.dynamicState[key];
+    if (!LEVELS.includes(repaired.dynamicState[key])) repaired.dynamicState[key] = base.dynamicState[key];
   }
 
   return repaired;
@@ -164,46 +188,21 @@ function incrementTurnCount(state) {
   return next;
 }
 
-function clampStateValue(value) {
-  return Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
-}
-
-function applyStateResistance(current, rawDelta, key) {
-  const sensitivity = STATE_SENSITIVITY[key] ?? 1;
-  let adjusted = rawDelta * sensitivity;
-
-  if (adjusted > 0) {
-    if (current >= 85) adjusted *= 0.2;
-    else if (current >= 70) adjusted *= 0.4;
-    else if (current >= 60) adjusted *= 0.7;
-  } else if (adjusted < 0) {
-    if (current <= 15) adjusted *= 0.2;
-    else if (current <= 30) adjusted *= 0.4;
-    else if (current <= 40) adjusted *= 0.7;
-  }
-
-  if (adjusted > 0 && adjusted < 1) adjusted = 1;
-  if (adjusted < 0 && adjusted > -1) adjusted = -1;
-
-  return Math.round(adjusted);
+function applyOneLevel(current, delta) {
+  const index = LEVELS.indexOf(current);
+  if (index === -1 || !DELTAS.has(delta)) return current;
+  if (delta === 'keep') return current;
+  if (delta === 'slight_up') return LEVELS[Math.min(index + 1, LEVELS.length - 1)];
+  return LEVELS[Math.max(index - 1, 0)];
 }
 
 function applyStateDelta(dynamicState, stateDelta = {}) {
   const current = { ...createEmptyState().dynamicState, ...(dynamicState || {}) };
   const next = { ...current };
   for (const key of Object.keys(current)) {
-    const delta = Number(stateDelta[key] || 0);
-    const effectiveDelta = Number.isFinite(delta) ? applyStateResistance(current[key], delta, key) : 0;
-    next[key] = clampStateValue(current[key] + effectiveDelta);
+    next[key] = applyOneLevel(current[key], stateDelta[key] || 'keep');
   }
   return next;
-}
-
-function describeStateLevel(value) {
-  const n = clampStateValue(value);
-  if (n < 30) return 'low';
-  if (n < 70) return 'medium';
-  return 'high';
 }
 
 function applyShortTermUpdate(shortTermState, shortTermUpdate = {}) {
@@ -217,7 +216,10 @@ function applyShortTermUpdate(shortTermState, shortTermUpdate = {}) {
       : current.interactionTrend,
     recentVoicePattern: typeof shortTermUpdate.recentVoicePattern === 'string' && shortTermUpdate.recentVoicePattern.trim()
       ? shortTermUpdate.recentVoicePattern.trim()
-      : current.recentVoicePattern
+      : current.recentVoicePattern,
+    recentImagePattern: typeof shortTermUpdate.recentImagePattern === 'string' && shortTermUpdate.recentImagePattern.trim()
+      ? shortTermUpdate.recentImagePattern.trim()
+      : current.recentImagePattern
   };
 }
 
@@ -275,6 +277,9 @@ function storeLastTurnTts(state, turnOutput) {
     naturalStylePrompt: turnOutput.naturalStylePrompt || '',
     currentEmotion: turnOutput.currentEmotion || '',
     sendVoiceNow: !!turnOutput.sendVoiceNow,
+    sendImageNow: !!turnOutput.sendImageNow,
+    imagePrompt: turnOutput.imagePrompt || '',
+    imageCaption: turnOutput.imageCaption || '',
     timestamp: nowIso(),
     stateDelta: turnOutput.stateDelta || {},
     shortTermUpdate: turnOutput.shortTermUpdate || {},
@@ -289,6 +294,17 @@ function storeLastGeneratedAudio(state, audioResult) {
     filename: audioResult?.filename || '',
     filepath: audioResult?.filepath || '',
     size: Number(audioResult?.size || 0),
+    createdAt: nowIso()
+  };
+  return next;
+}
+
+function storeLastGeneratedImage(state, imageResult) {
+  const next = repairState(state);
+  next.runtimeCache.lastGeneratedImage = {
+    filename: imageResult?.filename || '',
+    filepath: imageResult?.filepath || '',
+    size: Number(imageResult?.size || 0),
     createdAt: nowIso()
   };
   return next;
@@ -313,11 +329,56 @@ function applyTurnResult(state, turnOutput) {
   next.revealedMemory = mergeMemoryUpdate(next.revealedMemory, turnOutput.memoryUpdate || {});
   next = storeLastTurnTts(next, turnOutput);
   next = incrementTurnCount(next);
+
+  // 更新运行时计数和时间检测
+  const now = new Date();
+  const hour = now.getHours();
+  next.runtimeCache.lastInteractionTime = now.toISOString();
+
+  if (turnOutput.sendVoiceNow) {
+    next.runtimeCache.voiceCount = (next.runtimeCache.voiceCount || 0) + 1;
+  }
+  if (turnOutput.sendImageNow) {
+    next.runtimeCache.imageCount = (next.runtimeCache.imageCount || 0) + 1;
+  }
+
+  // 时间检测
+  if (hour >= 2 && hour < 5) {
+    next.runtimeCache.lateNightChat = true;
+  }
+  if (hour >= 6 && hour < 7) {
+    next.runtimeCache.earlyMorningChat = true;
+  }
+
+  // 长时间聊天检测（session 开始到当前超过 4 小时）
+  const sessionStart = next.runtimeCache.sessionStartTime;
+  if (sessionStart) {
+    const elapsed = (now.getTime() - new Date(sessionStart).getTime()) / (1000 * 60 * 60);
+    if (elapsed >= 4) {
+      next.runtimeCache.longChatSession = true;
+    }
+  }
+
+  return next;
+}
+
+/**
+ * 更新会话开始时间（在 startCyberGfHybrid 中调用）
+ */
+function updateSessionStartTime(state) {
+  const next = repairState(state);
+  if (!next.runtimeCache.sessionStartTime) {
+    next.runtimeCache.sessionStartTime = new Date().toISOString();
+  }
+  // 重置每会话的时间检测标志
+  next.runtimeCache.lateNightChat = false;
+  next.runtimeCache.earlyMorningChat = false;
+  next.runtimeCache.longChatSession = false;
   return next;
 }
 
 module.exports = {
-  STATE_KEYS,
+  LEVELS,
   getStatePath,
   createEmptyState,
   repairState,
@@ -328,14 +389,13 @@ module.exports = {
   incrementSessionCount,
   incrementTurnCount,
   applyStateDelta,
-  clampStateValue,
-  applyStateResistance,
-  describeStateLevel,
   applyShortTermUpdate,
   mergeMemoryUpdate,
   storeLastTurnTts,
   storeLastGeneratedAudio,
+  storeLastGeneratedImage,
   setDebugEnabled,
   isDebugEnabled,
-  applyTurnResult
+  applyTurnResult,
+  updateSessionStartTime
 };

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const ENV_PATH = '/root/.openclaw/workspace/.env.cyber-gf';
+const ENV_PATH = process.env.CYBER_GF_ENV_FILE || path.resolve(process.cwd(), '.env.cyber-gf');
 let loaded = false;
 
 function loadEnvFile() {
@@ -26,9 +26,10 @@ function loadEnvFile() {
 function getConfig() {
   loadEnvFile();
   return {
-    stateFile: process.env.CYBER_GF_STATE_FILE || '/root/.openclaw/workspace/.cyber-gf-state.json',
-    historyFile: process.env.CYBER_GF_HISTORY_FILE || '/root/.openclaw/workspace/.cyber-gf-history.json',
-    ttsOutputDir: process.env.CYBER_GF_TTS_OUTPUT_DIR || '/root/.openclaw/workspace/tts-cyber-gf',
+    stateFile: process.env.CYBER_GF_STATE_FILE || path.resolve(process.cwd(), '.cyber-gf-state.json'),
+    historyFile: process.env.CYBER_GF_HISTORY_FILE || path.resolve(process.cwd(), '.cyber-gf-history.json'),
+    ttsOutputDir: process.env.CYBER_GF_TTS_OUTPUT_DIR || path.resolve(process.cwd(), 'tts-cyber-gf'),
+    imageOutputDir: process.env.CYBER_GF_IMAGE_OUTPUT_DIR || path.resolve(process.cwd(), 'img-cyber-gf'),
     llm: {
       baseUrl: process.env.CYBER_GF_LLM_BASE_URL || '',
       apiKey: process.env.CYBER_GF_LLM_API_KEY || '',

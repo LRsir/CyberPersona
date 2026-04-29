@@ -1,21 +1,24 @@
 const { createEmptyState } = require('./cyber-gf-state');
 
+const VALID_ENUMS = ['low', 'medium', 'high'];
+
+// Each array: first element = ideal starting value, remaining = acceptable (minor deviation)
 const STARTING_RANGES = {
-  relationshipWarmth: [40, 65],
-  safety: [35, 60],
-  trust: [35, 60],
-  approachDesire: [40, 65],
-  vulnerabilityWillingness: [15, 45],
-  voiceEase: [10, 40]
+  relationshipWarmth: ['medium', 'low'],
+  safety: ['medium', 'low'],
+  trust: ['medium', 'low'],
+  approachDesire: ['medium', 'low'],
+  vulnerabilityWillingness: ['low', 'medium'],
+  voiceEase: ['low', 'medium']
 };
 
 const FALLBACK_DYNAMIC_STATE_INIT = {
-  relationshipWarmth: 50,
-  safety: 50,
-  trust: 50,
-  approachDesire: 50,
-  vulnerabilityWillingness: 30,
-  voiceEase: 20
+  relationshipWarmth: 'medium',
+  safety: 'medium',
+  trust: 'medium',
+  approachDesire: 'medium',
+  vulnerabilityWillingness: 'low',
+  voiceEase: 'low'
 };
 
 const MINOR_MARGIN = 5;
@@ -34,7 +37,7 @@ function validateInitialProfile(output) {
     return { ok: false, error: 'Missing required top-level sections' };
   }
 
-  const requiredProfileKeys = ['coreSummary', 'relationshipSummary', 'defenseSummary', 'startSummary', 'voiceSummary', 'profileSummary'];
+  const requiredProfileKeys = ['coreSummary', 'relationshipSummary', 'defenseSummary', 'startSummary', 'voiceSummary', 'appearance', 'profileSummary'];
   for (const key of requiredProfileKeys) {
     if (typeof profile[key] !== 'string' || !profile[key].trim()) {
       return { ok: false, error: `Missing profile field: ${key}` };
@@ -42,9 +45,9 @@ function validateInitialProfile(output) {
   }
 
   for (const key of ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase']) {
-    const value = Number(dynamicStateInit[key]);
-    if (!Number.isFinite(value) || value < 0 || value > 100) {
-      return { ok: false, error: `Invalid dynamic state value for ${key}` };
+    const value = dynamicStateInit[key];
+    if (!VALID_ENUMS.includes(value)) {
+      return { ok: false, error: `Invalid dynamic state value for ${key}: must be low/medium/high` };
     }
   }
 
@@ -60,20 +63,17 @@ function clampToRange(value, min, max) {
 }
 
 function classifyInitialDynamicState(dynamicStateInit) {
-  let severe = false;
   let minor = false;
 
-  for (const [key, [min, max]] of Object.entries(STARTING_RANGES)) {
-    const value = Number(dynamicStateInit[key]);
-    if (!Number.isFinite(value)) {
-      return { status: 'severe', reason: `Invalid non-numeric initial dynamic state for ${key}` };
+  for (const [key, range] of Object.entries(STARTING_RANGES)) {
+    const value = dynamicStateInit[key];
+    if (!VALID_ENUMS.includes(value)) {
+      return { status: 'severe', reason: `Invalid enum initial dynamic state for ${key}` };
     }
-    if (value >= min && value <= max) continue;
-    const distance = value < min ? (min - value) : (value - max);
-    if (distance <= MINOR_MARGIN) {
-      minor = true;
+    if (value === range[0]) continue; // ideal value
+    if (range.includes(value)) {
+      minor = true; // acceptable but not ideal
     } else {
-      severe = true;
       return { status: 'severe', reason: `Initial dynamic state severely out of range for ${key}` };
     }
   }
@@ -84,8 +84,8 @@ function classifyInitialDynamicState(dynamicStateInit) {
 
 function normalizeInitialDynamicState(dynamicStateInit) {
   const next = { ...dynamicStateInit };
-  for (const [key, [min, max]] of Object.entries(STARTING_RANGES)) {
-    next[key] = clampToRange(dynamicStateInit[key], min, max);
+  for (const [key, range] of Object.entries(STARTING_RANGES)) {
+    next[key] = range[0]; // normalize to ideal starting value
   }
   return next;
 }

@@ -2,23 +2,40 @@ function validateTurnOutput(output) {
   if (!output || typeof output !== 'object') {
     return { ok: false, error: 'Turn output is not an object' };
   }
-  const requiredStringFields = ['visibleText', 'taggedTtsText', 'currentEmotion'];
+  const requiredStringFields = ['visibleText', 'taggedTtsText', 'naturalStylePrompt', 'currentEmotion'];
   for (const key of requiredStringFields) {
     if (typeof output[key] !== 'string' || !output[key].trim()) {
       return { ok: false, error: `Missing turn field: ${key}` };
     }
   }
-  if (typeof output.naturalStylePrompt !== 'string') {
-    return { ok: false, error: 'naturalStylePrompt must be string' };
-  }
   if (typeof output.sendVoiceNow !== 'boolean') {
     return { ok: false, error: 'sendVoiceNow must be boolean' };
   }
 
+  // sendImageNow is optional, default false
+  if (output.sendImageNow !== undefined && typeof output.sendImageNow !== 'boolean') {
+    return { ok: false, error: 'sendImageNow must be boolean' };
+  }
+  // Default sendImageNow to false if not present
+  if (output.sendImageNow === undefined) {
+    output.sendImageNow = false;
+  }
+
+  // If sendImageNow is true, imagePrompt must be a non-empty string
+  if (output.sendImageNow) {
+    if (typeof output.imagePrompt !== 'string' || !output.imagePrompt.trim()) {
+      return { ok: false, error: 'imagePrompt must be a non-empty string when sendImageNow is true' };
+    }
+  }
+
+  // Default imagePrompt and imageCaption if not present
+  if (output.imagePrompt === undefined) output.imagePrompt = '';
+  if (output.imageCaption === undefined) output.imageCaption = '';
+
+  const allowedDeltas = new Set(['slight_up', 'slight_down', 'keep']);
   const delta = output.stateDelta || {};
   for (const key of ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase']) {
-    const value = Number(delta[key]);
-    if (!Number.isFinite(value) || value < -20 || value > 20) {
+    if (!allowedDeltas.has(delta[key])) {
       return { ok: false, error: `Invalid stateDelta for ${key}` };
     }
   }
@@ -28,91 +45,6 @@ function validateTurnOutput(output) {
   }
 
   return { ok: true, value: output };
-}
-
-function classifyTurnEvent(userMessage = '') {
-  const text = String(userMessage || '').trim();
-  if (!text) return 'neutral';
-  if (/睡|晚安|哄我睡|陪我睡/.test(text)) return 'comfort_sleep';
-  if (/想你|心里都是你|一直想着你|喜欢你|爱你/.test(text)) return 'affection';
-  if (/不理我|没理我|冷落|委屈|生气|难过|失望/.test(text)) return 'repair_tension';
-  if (/忙完|第一时间来找你|先来找你|刚忙完/.test(text)) return 'reassurance_priority';
-  if (/以前|之前|学什么|大学|过去|前任|对象/.test(text)) return 'past_disclosure';
-  if (/抱我|见面|拥抱/.test(text)) return 'physical_closeness';
-  return 'neutral';
-}
-
-function getEventDeltaBudget(eventType = 'neutral') {
-  const base = {
-    maxPositive: 3,
-    maxNegative: -3,
-    perKey: {
-      relationshipWarmth: 3,
-      safety: 3,
-      trust: 3,
-      approachDesire: 3,
-      vulnerabilityWillingness: 2,
-      voiceEase: 2
-    }
-  };
-
-  const table = {
-    neutral: base,
-    reassurance_priority: {
-      maxPositive: 4,
-      maxNegative: -3,
-      perKey: { ...base.perKey, relationshipWarmth: 4, safety: 4, trust: 3, approachDesire: 3 }
-    },
-    affection: {
-      maxPositive: 4,
-      maxNegative: -3,
-      perKey: { ...base.perKey, relationshipWarmth: 4, approachDesire: 4, vulnerabilityWillingness: 3 }
-    },
-    repair_tension: {
-      maxPositive: 3,
-      maxNegative: -5,
-      perKey: { ...base.perKey, safety: 5, trust: 4, approachDesire: 4, relationshipWarmth: 4 }
-    },
-    past_disclosure: {
-      maxPositive: 3,
-      maxNegative: -3,
-      perKey: { ...base.perKey, vulnerabilityWillingness: 4, trust: 3, relationshipWarmth: 2, voiceEase: 1 }
-    },
-    physical_closeness: {
-      maxPositive: 4,
-      maxNegative: -3,
-      perKey: { ...base.perKey, relationshipWarmth: 4, approachDesire: 4, vulnerabilityWillingness: 3, voiceEase: 2 }
-    },
-    comfort_sleep: {
-      maxPositive: 4,
-      maxNegative: -3,
-      perKey: { ...base.perKey, safety: 4, trust: 3, voiceEase: 3, vulnerabilityWillingness: 2 }
-    }
-  };
-
-  return table[eventType] || base;
-}
-
-function clampDelta(value, min, max) {
-  const n = Math.round(Number(value) || 0);
-  return Math.max(min, Math.min(max, n));
-}
-
-function normalizeTurnStateDelta(stateDelta = {}, userMessage = '') {
-  const eventType = classifyTurnEvent(userMessage);
-  const budget = getEventDeltaBudget(eventType);
-  const next = {};
-  for (const key of ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase']) {
-    const perKey = Math.max(1, Number(budget.perKey[key] || 3));
-    const max = Math.min(perKey, Math.max(1, Number(budget.maxPositive || perKey)));
-    const min = Math.max(-perKey, Math.min(-1, Number(budget.maxNegative || -perKey)));
-    next[key] = clampDelta(stateDelta[key], min, max);
-  }
-  return {
-    eventType,
-    budget,
-    stateDelta: next
-  };
 }
 
 function createFallbackTurnOutput(userMessage) {
@@ -134,22 +66,26 @@ function createFallbackTurnOutput(userMessage) {
   }
   return {
     visibleText: safeText,
-    taggedTtsText: `（轻声）${safeText}`,
-    naturalStylePrompt: '',
+    taggedTtsText: `（轻声，克制，但有情绪）${safeText}`,
+    naturalStylePrompt: '保持真人感，不要太戏剧化，像她本来想收一点，但还是选择认真接住对方。情绪轻轻露出来，不要演得太满。',
     currentEmotion: emotion,
     sendVoiceNow: false,
+    sendImageNow: false,
+    imagePrompt: '',
+    imageCaption: '',
     stateDelta: {
-      relationshipWarmth: 0,
-      safety: 0,
-      trust: 0,
-      approachDesire: 0,
-      vulnerabilityWillingness: 0,
-      voiceEase: 0
+      relationshipWarmth: 'keep',
+      safety: 'keep',
+      trust: 'keep',
+      approachDesire: 'keep',
+      vulnerabilityWillingness: 'keep',
+      voiceEase: 'keep'
     },
     shortTermUpdate: {
       unresolvedEmotion: 'none',
       interactionTrend: 'steady',
-      recentVoicePattern: 'none'
+      recentVoicePattern: 'none',
+      recentImagePattern: 'none'
     },
     memoryUpdate: {
       nicknameForUser: null,
@@ -164,8 +100,5 @@ function createFallbackTurnOutput(userMessage) {
 
 module.exports = {
   validateTurnOutput,
-  createFallbackTurnOutput,
-  classifyTurnEvent,
-  getEventDeltaBudget,
-  normalizeTurnStateDelta
+  createFallbackTurnOutput
 };
