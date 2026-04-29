@@ -14,7 +14,7 @@
       "provider": "xiaomi",
       "providers": {
         "xiaomi": {
-          "baseUrl": "https://fufu.iqach.top/v1",
+          "baseUrl": "https://your-mimo-base-url.example/v1",
           "apiKey": "sk-123",
           "model": "mimo-v2.5-tts",
           "voice": "茉莉",

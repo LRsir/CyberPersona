@@ -1,7 +1,7 @@
 {
   "generatedAt": "2026-04-28T21:35:00.248Z",
   "model": "mimo-v2-omni",
-  "baseUrl": "https://fufu.iqach.top/v1",
+  "baseUrl": "[redacted-runtime-endpoint]",
   "sourceReport": "/root/.openclaw/workspace/tts-official-ab-test/report.json",
   "count": 12,
   "modeSummary": {

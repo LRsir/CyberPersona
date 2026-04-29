@@ -11,7 +11,7 @@ const path = require('path');
 
 // 配置
 const CONFIG = {
-  baseUrl: 'https://fufu.iqach.top/v1',
+  baseUrl: process.env.XIAOMI_BASE_URL || 'https://your-mimo-base-url.example/v1',
   apiKey: process.env.XIAOMI_API_KEY || 'sk-123',
   text: '你好，我是小虾米，一个机灵的小跟班。很高兴认识你！',
   outputDir: '/root/.openclaw/workspace/tts-batch-output'

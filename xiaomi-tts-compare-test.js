@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CONFIG = {
-  baseUrl: 'https://fufu.iqach.top/v1',
+  baseUrl: process.env.XIAOMI_BASE_URL || 'https://your-mimo-base-url.example/v1',
   apiKey: process.env.XIAOMI_API_KEY || 'sk-123',
   voice: '茉莉',
   outputDir: '/root/.openclaw/workspace/tts-compare-test'

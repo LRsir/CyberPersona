@@ -36,7 +36,7 @@ function getConfig() {
       providerStyle: process.env.CYBER_GF_LLM_PROVIDER_STYLE || 'openai-compatible'
     },
     tts: {
-      baseUrl: process.env.XIAOMI_BASE_URL || 'https://fufu.iqach.top/v1',
+      baseUrl: process.env.XIAOMI_BASE_URL || '',
       apiKey: process.env.XIAOMI_API_KEY || '',
       model: process.env.XIAOMI_TTS_MODEL || 'mimo-v2.5-tts',
       voice: process.env.XIAOMI_TTS_VOICE || '茉莉',
