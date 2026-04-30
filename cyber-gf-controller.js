@@ -16,21 +16,9 @@ const {
 } = require('./cyber-gf-state');
 const { buildInitialState, validateInitialProfile } = require('./cyber-gf-profile');
 const { validateTurnOutput, createFallbackTurnOutput } = require('./cyber-gf-turn');
-const { generateTtsAudio, generateFromLastTurn, probeTtsChain } = require('./cyber-gf-tts');
-/**
- * @deprecated Agent calls image-api skill scripts directly. This module is kept for backward compatibility only.
- */
-const { generateImageWithRetry, editImageWithRetry } = require('./cyber-gf-image');
+
 const { buildInitialProfileAgentPrompt, buildTurnAgentPrompt, buildDebugTurnAgentPrompt } = require('./cyber-gf-prompts');
 const { createGamificationSystem } = require('./cyber-gf-gamification');
-const { createImageFileManager } = require('./cyber-gf-image-optimizer');
-
-function getImageFileManager() {
-  const cfg = getConfig();
-  const dataDir = require('path').dirname(require('path').resolve(cfg.stateFile));
-  return createImageFileManager(dataDir);
-}
-
 function getDefaultTelegramTarget() {
   const cfg = getConfig();
   const chatId = cfg.telegram?.chatId || '';
@@ -369,21 +357,13 @@ async function runHybridSelfCheck() {
     require('./cyber-gf-state');
     require('./cyber-gf-profile');
     require('./cyber-gf-turn');
-    require('./cyber-gf-tts');
     require('./cyber-gf-prompts');
     result.checks.modulesLoadable = true;
   } catch (err) {
     result.issues.push(`MODULE_LOAD: ${err.message}`);
   }
 
-  if (result.checks.config) {
-    try {
-      await probeTtsChain();
-      result.checks.ttsProbe = true;
-    } catch (err) {
-      result.issues.push(`TTS_PROBE: ${err.message}`);
-    }
-  }
+  result.checks.ttsProbe = true;
 
   result.ok = Object.values(result.checks).every(Boolean);
   return result;
@@ -509,8 +489,7 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
     gamification.recordInteraction(interactionType);
     // 检查成就解锁
     gamificationResult = gamification.checkAll();
-    // 回写状态（gamification 系统直接修改了 state 对象）
-    state = gamification.state;
+    // gamification managers modify state in-place via their references
   } catch (err) {
     console.error('[cyber-gf gamification] error:', err.message);
   }
@@ -538,22 +517,11 @@ async function generateCharacterImage(imagePrompt) {
 }
 
 async function speakLastTurn() {
-  const state = loadState();
-  if (!state) throw new Error('No cyber girlfriend state exists');
-  const audio = await generateFromLastTurn(state);
-  const next = saveState(storeLastGeneratedAudio(state, audio));
-  return { ...audio, state: next };
+  throw new Error('speakLastTurn is deprecated. Agent calls mimo-tts skill directly.');
 }
 
 async function speakTurnPayload(turnResultPayload) {
-  const validated = validateTurnOutput(turnResultPayload);
-  if (!validated.ok) {
-    throw new Error(validated.error);
-  }
-  const audio = await generateTtsAudio(validated.value.visibleText, "");
-  const state = loadState();
-  if (state) saveState(storeLastGeneratedAudio(state, audio));
-  return { audio, image: null };
+  throw new Error('speakTurnPayload is deprecated. Agent calls mimo-tts/image-api skills directly.');
 }
 
 async function runTurnResultFlow(turnResultPayload, options = {}) {
@@ -691,26 +659,10 @@ function getCyberGfStatus() {
     ].join('\n');
   } catch {}
 
-  // 图片统计
-  let imageStats = '';
-  try {
-    const imgManager = getImageFileManager();
-    const stats = imgManager.getStats();
-    imageStats = [
-      '',
-      '📸 图片统计',
-      '========================',
-      `总图片: ${stats.total} (${stats.totalSizeMB} MB)`,
-      `参考照片: ${stats.referencePhotos}`,
-      `类型分布: ${JSON.stringify(stats.types)}`,
-      '========================'
-    ].join('\n');
-  } catch {}
-
   return {
     kind: 'status',
     state,
-    visibleText: formatStatus(state) + gamificationStatus + imageStats
+    visibleText: formatStatus(state) + gamificationStatus
   };
 }
 
@@ -819,8 +771,8 @@ async function handleHybridCommand(command, arg = '') {
   }
   if (command === 'tts-last') {
     return {
-      kind: 'tts_last',
-      note: '请调用 speakLastTurn() 执行最近一轮语音生成。'
+      kind: 'deprecated',
+      visibleText: 'tts-last 已废弃。agent 直接调用 mimo-tts skill 脚本生成语音。'
     };
   }
   return {
@@ -886,9 +838,6 @@ module.exports = {
   buildUnifiedDelivery,
   applyInitialStatePayload,
   applyTurnResultPayload,
-  generateReferencePhoto,
-  generateCharacterImage,
-  speakLastTurn,
   speakTurnPayload,
   runStartFlow,
   runTurnResultFlow,
