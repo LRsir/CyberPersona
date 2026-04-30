@@ -30,12 +30,20 @@
 git clone https://github.com/harrylarryxyz/CyberPersona.git
 cd CyberPersona
 
-# 2. 安装依赖 Skill（见下方「关联 Skill」章节）
+# 2. 安装 Hermes Skill（让 Hermes Agent 知道如何使用本项目）
+mkdir -p ~/.hermes/skills/hermes/cyber-persona
+cp SKILL.md ~/.hermes/skills/hermes/cyber-persona/
+
+# 3. 安装依赖 Skill（见下方「关联 Skill」章节）
 # mimo-v2-5-tts, image-api, mood-sticker
 
-# 3. 配置环境变量
+# 4. 配置环境变量
 cp .env.cyber-gf.example .env.cyber-gf
-# 编辑 .env.cyber-gf 填入 API keys
+# 编辑 .env.cyber-gf 填入 API keys：
+# - MIMO_API_KEY（小米 MiMo 开放平台）
+# - MIMO_BASE_URL（小米 MiMo API 地址）
+# - IMAGE_API_KEY（图片生成 API）
+# - IMAGE_API_BASE（图片生成 API 地址）
 ```
 
 ### 使用
@@ -73,13 +81,14 @@ debug 发表情 害羞        # 测试贴纸
 ## 架构
 
 ```
-├── cyber-gf-config.js        # 配置加载
-├── cyber-gf-controller.js    # 主控制器，CLI 入口，交付逻辑
-├── cyber-gf-state.js         # 状态管理（动态状态、情绪历史、氛围因子）
-├── cyber-gf-profile.js       # 角色档案验证与初始化
-├── cyber-gf-turn.js          # 回合输出验证
-├── cyber-gf-prompts.js       # LLM prompt 构建
-├── cyber-gf-gamification.js  # 游戏化系统（成就/好感度/任务/收集）
+├── SKILL.md                    # Hermes Agent Skill 文件（需复制到 ~/.hermes/skills/）
+├── cyber-gf-config.js          # 配置加载
+├── cyber-gf-controller.js      # 主控制器，CLI 入口，交付逻辑
+├── cyber-gf-state.js           # 状态管理（动态状态、情绪历史、氛围因子）
+├── cyber-gf-profile.js         # 角色档案验证与初始化
+├── cyber-gf-turn.js            # 回合输出验证
+├── cyber-gf-prompts.js         # LLM prompt 构建
+├── cyber-gf-gamification.js    # 游戏化系统（成就/好感度/任务/收集）
 └── docs/
     └── DESIGN-EMOTIONAL-DEPTH.md  # 情绪深度系统设计文档
 ```
