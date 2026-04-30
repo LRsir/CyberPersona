@@ -443,12 +443,15 @@ function buildDebugTurnPayload(debugCommand) {
 }
 
 function applyInitialStatePayload(initialPayload) {
+  const start = Date.now();
   const validated = validateInitialProfile(initialPayload);
   if (!validated.ok) {
     throw new Error(validated.error);
   }
   let state = buildInitialState(validated.value);
   state = saveState(state);
+  const elapsed = Date.now() - start;
+  console.error(`[perf] applyInitialStatePayload: ${elapsed}ms`);
   return {
     state,
     openingMessage: validated.value.openingMessage
