@@ -290,6 +290,8 @@ When entering: **automatically suppress gateway notifications** via flag file `~
 
 When there's no existing state, the agent must:
 
+**第一步：生成完整人设信息（LLM 推理）**
+
 1. Generate `InitialStatePayload` JSON using the prompt from step 1. Must include ALL of these sections (validator rejects if any missing):
    - `profile` — object with REQUIRED keys: `coreSummary`, `relationshipSummary`, `defenseSummary`, `startSummary`, `voiceSummary`, `appearance`, `voiceDescription`, `profileSummary`
    - `dynamicStateInit` — 6 integer values (0-100): trust, security, intimacy, attachment, jealousy, voiceTendency
@@ -298,7 +300,15 @@ When there's no existing state, the agent must:
    - `openingMessage` — string, character's first message to user
    - `emotionalProfile` — { baseline, vulnerabilityTopics } (optional but recommended)
 2. Save to `/tmp/cyber-gf-init-payload.json`
-3. **Generate voice sample** (required for character voice consistency):
+
+**第二步：并行生成三个产物**
+
+并行执行以下三个任务（使用 delegate_task 或同时启动）：
+
+**2.1 输出人物信息卡片**
+- 根据 profile 内容，输出角色信息卡片（格式见下方）
+
+**2.2 生成样本声音**
 ```bash
 source ~/.hermes/.env && export MIMO_API_KEY="$MIMO_API_KEY" && export MIMO_BASE_URL="$MIMO_BASE_URL"
 ```
@@ -310,60 +320,46 @@ python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts_voicedesign.py \
   --text "你好呀，今天天气真不错，我们出去走走吧。" \
   --output ~/.hermes/CyberPersona-hermes/.data/voice-sample.wav
 ```
-4. **Add voiceSamplePath to payload** (critical — payload must include the sample path before applying):
+
+**2.3 生成证件照**
 ```bash
-cd ~/.hermes/CyberPersona-hermes && node -e "
-const fs = require('fs');
-const payload = JSON.parse(fs.readFileSync('/tmp/cyber-gf-init-payload.json', 'utf8'));
-payload.profile.voiceSamplePath = '~/.hermes/CyberPersona-hermes/.data/voice-sample.wav';
-fs.writeFileSync('/tmp/cyber-gf-init-payload.json', JSON.stringify(payload, null, 2));
-console.log('voiceSamplePath added');
-"
+source ~/.hermes/.env && export IMAGE_API_KEY="$IMAGE_API_KEY" && export IMAGE_API_BASE="$IMAGE_API_BASE"
 ```
-5. **Apply start payload** (profile saved with voiceSamplePath):
+> **PITFALL:** Ensure `IMAGE_API_KEY` and `IMAGE_API_BASE` are set in your .env file.
+
 ```bash
-cd ~/.hermes/CyberPersona-hermes && node cyber-gf-controller.js apply-start-payload /tmp/cyber-gf-init-payload.json
-```
-6. **Generate reference photo** (required for character consistency):
-```bash
-source ~/.hermes/.env && export IMAGE_API_KEY="$MIMO_API_KEY" && export IMAGE_API_BASE="$MIMO_BASE_URL"
 python3 ~/.hermes/skills/image-api/scripts/image_api.py \
   --json --size 1024x1024 --quality high --format png --moderation low \
   "standard portrait photo, head and shoulders, neutral gray background, looking at camera. <appearance description>"
 ```
 > **NOTE:** `generate-reference-photo` CLI command is deprecated — it prints a message telling you to call image-api directly.
 > **PITFALL:** Image API can timeout (120s+) or fail intermittently. Use timeout >= 180s. If it fails, retry with a shorter prompt.
-7. **Generate character introduction photo**:
-```bash
-source ~/.hermes/.env && export IMAGE_API_KEY="$MIMO_API_KEY" && export IMAGE_API_BASE="$MIMO_BASE_URL"
-```
-> **PITFALL:** Ensure `IMAGE_API_KEY` and `IMAGE_API_BASE` are set in your .env file.
 
+**第三步：应用 start payload**
+
+1. **Add voiceSamplePath to payload** (critical — payload must include the sample path before applying):
 ```bash
-python3 ~/.hermes/skills/image-api/scripts/image_api.py \
-  --json \
-  --edit \
-  --image <referencePhotoPath> \
-  "<appearance description> + <场景描述，体现人物性格的照片>" \
-  --size 1024x1024 \
-  --format png \
-  --moderation low
+cd ~/.hermes/CyberPersona-hermes && node -e "
+const fs = require('fs');
+const payload = JSON.parse(fs.readFileSync('/tmp/cyber-gf-init-payload.json', 'utf8'));
+payload.profile.voiceSamplePath = '/root/.hermes/CyberPersona-hermes/.data/voice-sample.wav';
+fs.writeFileSync('/tmp/cyber-gf-init-payload.json', JSON.stringify(payload, null, 2));
+console.log('voiceSamplePath added');
+"
 ```
-8. **Generate introduction voice**:
+
+2. **Apply start payload** (profile saved with voiceSamplePath):
 ```bash
-source ~/.hermes/.env && export MIMO_API_KEY="$MIMO_API_KEY" && export MIMO_BASE_URL="$MIMO_BASE_URL"
-python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts_voiceclone.py \
-  --voice-file ~/.hermes/CyberPersona-hermes/.data/voice-sample.wav \
-  --text "<角色的自我介绍语音文本>" \
-  --context "<style hint>" \
-  --output /tmp/cyber-gf-intro-voice.wav
-ffmpeg -y -i /tmp/cyber-gf-intro-voice.wav -c:a libopus -b:a 32k /tmp/cyber-gf-intro-voice.ogg
+cd ~/.hermes/CyberPersona-hermes && node cyber-gf-controller.js apply-start-payload /tmp/cyber-gf-init-payload.json
 ```
-9. **Output character introduction to user** — Send in order:
-   - **Character info card** (updated format below)
-   - **Character photo**: introduction photo from step 7
-   - **Character voice**: introduction voice from step 8
-   - **Opening message**: character's first message
+
+**第四步：输出角色介绍**
+
+Send in order:
+- **Character info card** (format below)
+- **Character photo**: reference photo from step 2.3
+- **Character voice**: voice sample from step 2.2
+- **Opening message**: character's first message
 
 **Character info card format (v8.0):**
 ```
@@ -483,7 +479,7 @@ Agent calls mimo-tts skill scripts directly. TTS text = `visibleText`:
 
 **日常语音（clone 模式）：**
 ```bash
-source ~/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$MIMO_BASE_URL"
+source /root/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$XIAOMI_BASE_URL"
 python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts_voiceclone.py \
   --voice-file ~/.hermes/CyberPersona-hermes/.data/voice-sample.wav \
   --context "自然语言风格控制" \
@@ -494,7 +490,7 @@ ffmpeg -y -i /tmp/cyber-gf-tts-output.wav -c:a libopus -b:a 32k /tmp/cyber-gf-tt
 
 **唱歌（preset 模式，clone 不支持唱歌）：**
 ```bash
-source ~/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$MIMO_BASE_URL"
+source /root/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$XIAOMI_BASE_URL"
 python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts.py \
   --voice "茉莉" \
   --text "(唱歌)完整歌词内容" \
