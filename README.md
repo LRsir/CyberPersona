@@ -11,6 +11,8 @@
 - **表情包** — tangdouz API 免费表情包搜索，情绪驱动
 - **游戏化** — 18 个成就，好感度系统（0-1000），每日任务，收集系统
 - **上下文驱动** — LLM 根据完整上下文自然推理，不依赖规则引擎
+- **Cheat 模式** — `cheat on/off` 控制信息展示（回合小结、聊天建议、详细总结）
+- **Debug 模式** — `debug on/off` + 丰富的调试命令（状态查看、记忆查看、状态修改、场景模拟）
 
 ## 快速开始
 
@@ -39,6 +41,34 @@ cp .env.cyber-gf.example .env.cyber-gf
 ### 使用
 
 在 Hermes Agent 中说 `开始赛博女友` 即可启动。
+
+#### Cheat 模式
+
+控制信息展示（回合小结、聊天建议、详细退出总结）：
+
+```
+开始赛博女友 cheat on    # 启动时开启
+cheat on                 # 对话中开启
+cheat off                # 对话中关闭
+```
+
+退出后自动重置为关闭状态。
+
+#### Debug 模式
+
+调试命令，需先 `debug on` 开启：
+
+```
+debug on                 # 开启 debug 模式
+debug off                # 关闭 debug 模式
+debug 状态               # 查看内部状态
+debug 记忆               # 查看所有记忆
+debug 设置 trust 80      # 修改维度
+debug 场景 被夸奖        # 模拟场景
+debug 发语音 晚安        # 测试语音
+debug 发照片             # 测试图片
+debug 发表情 害羞        # 测试贴纸
+```
 
 ## 架构
 
