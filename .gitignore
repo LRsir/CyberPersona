@@ -1,12 +1,16 @@
+# Environment & secrets
 .env
 .env.*
 !.env.cyber-gf.example
+
+# Runtime state (contains character data, not for version control)
 .cyber-gf-state.json
 .cyber-gf-history.json
-.openclaw/
-memory/
-out/
-*.log
+image-index.json
+
+# Generated data
+.data/
+img-cyber-gf/
 tts-cyber-gf/
 tts-output/
 tts-compare-test/
@@ -14,8 +18,23 @@ tts-emotion-test/
 tts-style-test/
 tts-voicedesign-test/
 tts-official-ab-test/*.mp3
+
+# Test artifacts
 _live_*.json
 _sample_*.json
 *_test.json
+
+# Legacy
+.openclaw/
+memory/
+out/
+
+# Dependencies
 node_modules/
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Logs
+*.log

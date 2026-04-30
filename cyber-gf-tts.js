@@ -13,13 +13,13 @@ function getTtsConfig() {
   };
 }
 
-function buildTtsRequest(taggedTtsText, naturalStylePrompt) {
+function buildTtsRequest(textContent, styleHint) {
   const CONFIG = getTtsConfig();
   const messages = [];
-  if (naturalStylePrompt && naturalStylePrompt.trim()) {
-    messages.push({ role: 'user', content: naturalStylePrompt.trim() });
+  if (styleHint && styleHint.trim()) {
+    messages.push({ role: 'user', content: styleHint.trim() });
   }
-  messages.push({ role: 'assistant', content: taggedTtsText });
+  messages.push({ role: 'assistant', content: textContent });
   return {
     model: CONFIG.model,
     messages,
@@ -37,14 +37,14 @@ function ensureOutputDir() {
   }
 }
 
-function generateTtsAudio(taggedTtsText, naturalStylePrompt) {
-  return requestTtsWithRetry(taggedTtsText, naturalStylePrompt, 2);
+function generateTtsAudio(textContent, styleHint) {
+  return requestTtsWithRetry(textContent, styleHint, 2);
 }
 
-function requestTtsOnce(taggedTtsText, naturalStylePrompt) {
+function requestTtsOnce(textContent, styleHint) {
   return new Promise((resolve, reject) => {
     const CONFIG = getTtsConfig();
-    const payload = buildTtsRequest(taggedTtsText, naturalStylePrompt);
+    const payload = buildTtsRequest(textContent, styleHint);
     const postData = JSON.stringify(payload);
     const url = new URL(CONFIG.baseUrl);
     const options = {
@@ -107,11 +107,11 @@ function requestTtsOnce(taggedTtsText, naturalStylePrompt) {
   });
 }
 
-async function requestTtsWithRetry(taggedTtsText, naturalStylePrompt, attempts = 2) {
+async function requestTtsWithRetry(textContent, styleHint, attempts = 2) {
   let lastError;
   for (let i = 0; i < attempts; i += 1) {
     try {
-      return await requestTtsOnce(taggedTtsText, naturalStylePrompt);
+      return await requestTtsOnce(textContent, styleHint);
     } catch (err) {
       lastError = err;
       if (i < attempts - 1) {
@@ -124,10 +124,10 @@ async function requestTtsWithRetry(taggedTtsText, naturalStylePrompt, attempts =
 
 function generateFromLastTurn(state) {
   const last = state?.runtimeCache?.lastTurnTts;
-  if (!last?.taggedTtsText) {
+  if (!last?.visibleText) {
     throw new Error('No cached TTS turn available');
   }
-  return generateTtsAudio(last.taggedTtsText, last.naturalStylePrompt || '');
+  return generateTtsAudio(last.visibleText, '');
 }
 
 async function probeTtsChain() {

@@ -43,6 +43,9 @@ function getConfig() {
       voice: process.env.XIAOMI_TTS_VOICE || '茉莉',
       format: process.env.XIAOMI_TTS_FORMAT || 'mp3'
     },
+    telegram: {
+      chatId: process.env.TELEGRAM_CHAT_ID || ''
+    },
     debug: {
       enabled: /^(1|true|yes|on)$/i.test(process.env.CYBER_GF_DEBUG || ''),
       showTtsControls: /^(1|true|yes|on)$/i.test(process.env.CYBER_GF_DEBUG_TTS || process.env.CYBER_GF_DEBUG || '')

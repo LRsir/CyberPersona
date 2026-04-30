@@ -2,7 +2,7 @@ function validateTurnOutput(output) {
   if (!output || typeof output !== 'object') {
     return { ok: false, error: 'Turn output is not an object' };
   }
-  const requiredStringFields = ['visibleText', 'taggedTtsText', 'naturalStylePrompt', 'currentEmotion'];
+  const requiredStringFields = ['visibleText', 'currentEmotion'];
   for (const key of requiredStringFields) {
     if (typeof output[key] !== 'string' || !output[key].trim()) {
       return { ok: false, error: `Missing turn field: ${key}` };
@@ -32,12 +32,30 @@ function validateTurnOutput(output) {
   if (output.imagePrompt === undefined) output.imagePrompt = '';
   if (output.imageCaption === undefined) output.imageCaption = '';
 
-  const allowedDeltas = new Set(['slight_up', 'slight_down', 'keep']);
+  // sendGifNow is optional, default false
+  if (output.sendGifNow !== undefined && typeof output.sendGifNow !== 'boolean') {
+    return { ok: false, error: 'sendGifNow must be boolean' };
+  }
+  if (output.sendGifNow === undefined) {
+    output.sendGifNow = false;
+  }
+  // gifKeyword is optional, default ''
+  if (output.gifKeyword !== undefined && typeof output.gifKeyword !== 'string') {
+    return { ok: false, error: 'gifKeyword must be a string' };
+  }
+  if (output.gifKeyword === undefined) output.gifKeyword = '';
+
+  const stateDeltaKeys = ['trust', 'security', 'intimacy', 'attachment', 'jealousy', 'voiceTendency'];
   const delta = output.stateDelta || {};
-  for (const key of ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase']) {
-    if (!allowedDeltas.has(delta[key])) {
-      return { ok: false, error: `Invalid stateDelta for ${key}` };
+  for (const key of stateDeltaKeys) {
+    if (delta[key] !== undefined && !Number.isInteger(delta[key])) {
+      return { ok: false, error: `stateDelta.${key} must be an integer` };
     }
+  }
+  // Default missing delta keys to 0
+  output.stateDelta = output.stateDelta || {};
+  for (const key of stateDeltaKeys) {
+    if (output.stateDelta[key] === undefined) output.stateDelta[key] = 0;
   }
 
   if (!output.shortTermUpdate || !output.memoryUpdate) {
@@ -66,26 +84,27 @@ function createFallbackTurnOutput(userMessage) {
   }
   return {
     visibleText: safeText,
-    taggedTtsText: `（轻声，克制，但有情绪）${safeText}`,
-    naturalStylePrompt: '保持真人感，不要太戏剧化，像她本来想收一点，但还是选择认真接住对方。情绪轻轻露出来，不要演得太满。',
     currentEmotion: emotion,
     sendVoiceNow: false,
     sendImageNow: false,
     imagePrompt: '',
     imageCaption: '',
+    sendGifNow: false,
+    gifKeyword: '',
     stateDelta: {
-      relationshipWarmth: 'keep',
-      safety: 'keep',
-      trust: 'keep',
-      approachDesire: 'keep',
-      vulnerabilityWillingness: 'keep',
-      voiceEase: 'keep'
+      trust: 0,
+      security: 0,
+      intimacy: 0,
+      attachment: 0,
+      jealousy: 0,
+      voiceTendency: 0
     },
     shortTermUpdate: {
       unresolvedEmotion: 'none',
       interactionTrend: 'steady',
       recentVoicePattern: 'none',
-      recentImagePattern: 'none'
+      recentImagePattern: 'none',
+      emotionHistory: []
     },
     memoryUpdate: {
       nicknameForUser: null,

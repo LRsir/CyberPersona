@@ -1,24 +1,26 @@
 const { createEmptyState } = require('./cyber-gf-state');
 
-const VALID_ENUMS = ['low', 'medium', 'high'];
+// Integer dimensions validated 0–100
+const DIMENSION_MIN = 0;
+const DIMENSION_MAX = 100;
 
-// Each array: first element = ideal starting value, remaining = acceptable (minor deviation)
+// Each array: [ideal, min-acceptable, max-acceptable]
 const STARTING_RANGES = {
-  relationshipWarmth: ['medium', 'low'],
-  safety: ['medium', 'low'],
-  trust: ['medium', 'low'],
-  approachDesire: ['medium', 'low'],
-  vulnerabilityWillingness: ['low', 'medium'],
-  voiceEase: ['low', 'medium']
+  trust:          [30, 20, 40],
+  security:       [30, 20, 40],
+  intimacy:       [20, 10, 30],
+  attachment:     [20, 10, 30],
+  jealousy:       [10, 5, 20],
+  voiceTendency:  [10, 5, 20]
 };
 
 const FALLBACK_DYNAMIC_STATE_INIT = {
-  relationshipWarmth: 'medium',
-  safety: 'medium',
-  trust: 'medium',
-  approachDesire: 'medium',
-  vulnerabilityWillingness: 'low',
-  voiceEase: 'low'
+  trust: 30,
+  security: 30,
+  intimacy: 20,
+  attachment: 20,
+  jealousy: 10,
+  voiceTendency: 10
 };
 
 const MINOR_MARGIN = 5;
@@ -37,17 +39,25 @@ function validateInitialProfile(output) {
     return { ok: false, error: 'Missing required top-level sections' };
   }
 
-  const requiredProfileKeys = ['coreSummary', 'relationshipSummary', 'defenseSummary', 'startSummary', 'voiceSummary', 'appearance', 'profileSummary'];
+  const requiredProfileKeys = ['coreSummary', 'relationshipSummary', 'defenseSummary', 'startSummary', 'voiceSummary', 'appearance', 'voiceDescription', 'profileSummary'];
   for (const key of requiredProfileKeys) {
     if (typeof profile[key] !== 'string' || !profile[key].trim()) {
       return { ok: false, error: `Missing profile field: ${key}` };
     }
   }
 
-  for (const key of ['relationshipWarmth', 'safety', 'trust', 'approachDesire', 'vulnerabilityWillingness', 'voiceEase']) {
+  const dimensionKeys = Object.keys(STARTING_RANGES);
+  for (const key of dimensionKeys) {
     const value = dynamicStateInit[key];
-    if (!VALID_ENUMS.includes(value)) {
-      return { ok: false, error: `Invalid dynamic state value for ${key}: must be low/medium/high` };
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < DIMENSION_MIN || value > DIMENSION_MAX) {
+      return { ok: false, error: `Invalid dynamic state value for ${key}: must be integer ${DIMENSION_MIN}-${DIMENSION_MAX}` };
+    }
+  }
+
+  // emotionalProfile is optional, but if present must have a baseline string
+  if (output.emotionalProfile !== undefined) {
+    if (!output.emotionalProfile || typeof output.emotionalProfile.baseline !== 'string' || !output.emotionalProfile.baseline.trim()) {
+      return { ok: false, error: 'emotionalProfile.baseline must be a non-empty string when emotionalProfile is provided' };
     }
   }
 
@@ -67,11 +77,12 @@ function classifyInitialDynamicState(dynamicStateInit) {
 
   for (const [key, range] of Object.entries(STARTING_RANGES)) {
     const value = dynamicStateInit[key];
-    if (!VALID_ENUMS.includes(value)) {
-      return { status: 'severe', reason: `Invalid enum initial dynamic state for ${key}` };
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < DIMENSION_MIN || value > DIMENSION_MAX) {
+      return { status: 'severe', reason: `Invalid integer initial dynamic state for ${key}` };
     }
-    if (value === range[0]) continue; // ideal value
-    if (range.includes(value)) {
+    const [ideal, minAccept, maxAccept] = range;
+    if (value === ideal) continue; // ideal value
+    if (value >= minAccept && value <= maxAccept) {
       minor = true; // acceptable but not ideal
     } else {
       return { status: 'severe', reason: `Initial dynamic state severely out of range for ${key}` };
@@ -85,7 +96,7 @@ function classifyInitialDynamicState(dynamicStateInit) {
 function normalizeInitialDynamicState(dynamicStateInit) {
   const next = { ...dynamicStateInit };
   for (const [key, range] of Object.entries(STARTING_RANGES)) {
-    next[key] = range[0]; // normalize to ideal starting value
+    next[key] = range[0]; // normalize to ideal starting integer value
   }
   return next;
 }
@@ -151,7 +162,7 @@ function resolveInitialProfilePayload(output, options = {}) {
 
 function buildInitialState(initialProfileOutput) {
   const base = createEmptyState();
-  return {
+  const state = {
     ...base,
     mode: {
       enabled: true,
@@ -177,8 +188,16 @@ function buildInitialState(initialProfileOutput) {
     revealedMemory: {
       ...base.revealedMemory,
       ...initialProfileOutput.revealedMemoryInit
-    }
+    },
+    sessionSummaries: []
   };
+
+  // Include emotionalProfile if the LLM provided one
+  if (initialProfileOutput.emotionalProfile) {
+    state.emotionalProfile = initialProfileOutput.emotionalProfile;
+  }
+
+  return state;
 }
 
 module.exports = {

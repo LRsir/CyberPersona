@@ -28,6 +28,12 @@ function getImageFileManager() {
   return createImageFileManager(dataDir);
 }
 
+function getDefaultTelegramTarget() {
+  const cfg = getConfig();
+  const chatId = cfg.telegram?.chatId || '';
+  return chatId ? `telegram:${chatId}` : 'telegram';
+}
+
 function getHistoryPath() {
   return getConfig().historyFile;
 }
@@ -58,18 +64,20 @@ function getRecentContext(limit = 4) {
 }
 
 function formatStatus(state) {
+  const dimLabel = (v) => v <= 20 ? '冰点' : v <= 40 ? '低' : v <= 60 ? '中' : v <= 80 ? '高' : '满';
+  const dimLine = (label, v) => `${label}: ${v} (${dimLabel(v)})`;
   return [
     '💗 赛博女友状态',
     '========================',
     `已开启: ${state.mode.enabled ? '是' : '否'}`,
     `人设摘要: ${state.profile.profileSummary || '暂无'}`,
     `关系摘要: ${state.revealedMemory.lastSummary || '暂无'}`,
-    `关系温度: ${state.dynamicState.relationshipWarmth}`,
-    `安全感: ${state.dynamicState.safety}`,
-    `信任感: ${state.dynamicState.trust}`,
-    `主动靠近意愿: ${state.dynamicState.approachDesire}`,
-    `暴露意愿: ${state.dynamicState.vulnerabilityWillingness}`,
-    `语音自然度: ${state.dynamicState.voiceEase}`,
+    dimLine('信任感', state.dynamicState.trust),
+    dimLine('安全感', state.dynamicState.security),
+    dimLine('亲密感', state.dynamicState.intimacy),
+    dimLine('依恋度', state.dynamicState.attachment),
+    dimLine('占有欲', state.dynamicState.jealousy),
+    dimLine('语音倾向度', state.dynamicState.voiceTendency),
     `最近未解情绪: ${state.shortTermState.unresolvedEmotion}`,
     '========================'
   ].join('\n');
@@ -86,9 +94,9 @@ function buildTurnDebugInfo(turnOutput, forceDebug = false) {
   if (turnOutput.sendImageNow && turnOutput.imagePrompt) {
     lines.push(`imagePrompt: ${turnOutput.imagePrompt}`);
   }
-  if (forceDebug || cfg.debug.showTtsControls) {
-    lines.push(`taggedTtsText: ${turnOutput.taggedTtsText}`);
-    lines.push(`naturalStylePrompt: ${turnOutput.naturalStylePrompt}`);
+  if (turnOutput.sendGifNow && turnOutput.gifKeyword) {
+    lines.push(`sendGifNow: true`);
+    lines.push(`gifKeyword: ${turnOutput.gifKeyword}`);
   }
   return lines.join('\n');
 }
@@ -109,7 +117,7 @@ function setCyberGfDebug(flag) {
 
 function getLastVoiceDeliveryInfo() {
   const state = loadState();
-  if (!state?.runtimeCache?.lastTurnTts?.taggedTtsText) {
+  if (!state?.runtimeCache?.lastTurnTts?.visibleText) {
     return {
       kind: 'voice_delivery_info',
       visibleText: '当前没有可发送的最近一轮语音缓存。'
@@ -148,7 +156,7 @@ function getLastGeneratedAudioInfo() {
   };
 }
 
-function buildVoiceSendPayloadFromAudio(audio, target = 'telegram:8121382159') {
+function buildVoiceSendPayloadFromAudio(audio, target = getDefaultTelegramTarget()) {
   if (!audio?.filepath) return null;
   return {
     action: 'send',
@@ -167,7 +175,7 @@ function buildVoiceSendPayloadFromAudio(audio, target = 'telegram:8121382159') {
   };
 }
 
-function getTelegramVoiceSendPayload(target = 'telegram:8121382159') {
+function getTelegramVoiceSendPayload(target = getDefaultTelegramTarget()) {
   const state = loadState();
   const audio = state?.runtimeCache?.lastGeneratedAudio;
   if (!audio?.filepath) {
@@ -185,7 +193,7 @@ function getTelegramVoiceSendPayload(target = 'telegram:8121382159') {
 function buildUnifiedDelivery(turnOutput, options = {}) {
   const state = loadState();
   const debugText = buildTurnDebugInfo(turnOutput, options.forceDebug);
-  const target = options.target || 'telegram:8121382159';
+  const target = options.target || getDefaultTelegramTarget();
   const audio = state?.runtimeCache?.lastGeneratedAudio;
   const voicePayload = turnOutput.sendVoiceNow ? buildVoiceSendPayloadFromAudio(audio, target) : null;
   const image = state?.runtimeCache?.lastGeneratedImage;
@@ -204,6 +212,9 @@ function buildUnifiedDelivery(turnOutput, options = {}) {
     silent: false,
     bestEffort: false
   } : null;
+  const gifPayload = (turnOutput.sendGifNow && turnOutput.gifKeyword)
+    ? { sendGif: true, keyword: turnOutput.gifKeyword }
+    : null;
   return {
     mode: voicePayload ? 'voice_note' : (imagePayload ? 'image_post' : 'text_reply'),
     text: debugText ? `${turnOutput.visibleText}\n\n${debugText}` : turnOutput.visibleText,
@@ -211,6 +222,7 @@ function buildUnifiedDelivery(turnOutput, options = {}) {
     sendImageNow: !!turnOutput.sendImageNow,
     voicePayload,
     imagePayload,
+    gifPayload,
     imageCaption: turnOutput.imageCaption || '',
     shouldReplyInChat: !voicePayload,
     shouldNoReplyAfterMessageSend: !!(voicePayload || imagePayload),
@@ -258,8 +270,7 @@ function getLastTurnDebug() {
       `stateDelta: ${JSON.stringify(last.stateDelta || {})}`,
       `shortTermUpdate: ${JSON.stringify(last.shortTermUpdate || {})}`,
       `memoryUpdate: ${JSON.stringify(last.memoryUpdate || {})}`,
-      `taggedTtsText: ${last.taggedTtsText}`,
-      `naturalStylePrompt: ${last.naturalStylePrompt}`,
+      ...(last.sendGifNow ? [`sendGifNow: true`, `gifKeyword: ${last.gifKeyword}`] : []),
       `timestamp: ${last.timestamp}`
     ].join('\n')
   };
@@ -283,7 +294,12 @@ function buildTurnContextPayload(userMessage) {
     shortTermState: state.shortTermState,
     revealedMemory: state.revealedMemory,
     recentContext,
-    userMessage
+    userMessage,
+    emotionHistory: state.shortTermState.emotionHistory || [],
+    moodFactors: state.shortTermState.moodFactors || {},
+    emotionalMemories: state.revealedMemory.emotionalMemories || [],
+    emotionalProfile: state.profile.emotionalProfile || {},
+    sessionSummaries: state.profile.sessionSummaries || []
   };
 }
 
@@ -291,7 +307,7 @@ function buildStartPayload() {
   return {
     prompt: buildInitialProfileAgentPrompt(),
     envPath: ENV_PATH,
-    note: '让 agent 使用这个 prompt 生成 InitialStatePayload，然后调用 applyInitialStatePayload(payload) 即可落盘。落盘后必须调用 generateReferencePhoto() 生成人物参考照片，用于后续图片的人物一致性。'
+    note: '让 agent 使用这个 prompt 生成 InitialStatePayload。生成后，agent 需要按顺序执行：1) 用 voiceDescription 调用 mimo_tts_voicedesign.py 生成音色样本（保存到 ~/.hermes/CyberPersona-hermes/.data/voice-sample.wav）；2) 将 voiceSamplePath 写入 payload；3) 调用 applyStartPayload(payload) 落盘；4) 调用 generateReferencePhoto() 生成参考照片；5) 生成角色展示照片（不同于参考照片，体现人物性格）；6) 用 voice clone 生成自我介绍语音；7) 输出角色信息卡（姓名、年龄、性格、外貌、声音、关系状态、游戏化参数）；8) 发送展示照片；9) 发送介绍语音；10) 发送 openingMessage。'
   };
 }
 
@@ -419,7 +435,7 @@ function buildTurnPayload(userMessage) {
     prompt: buildTurnAgentPrompt(turnContext),
     context: turnContext,
     envPath: ENV_PATH,
-    note: '让 agent 生成 TurnResultPayload，然后调用 applyTurnResultPayload(payload, userMessage) 落盘；如 sendVoiceNow=true，再调用 speakLastTurn()。'
+    note: '让 agent 生成 TurnResultPayload，然后调用 applyTurnResultPayload(payload, userMessage) 落盘。如 sendVoiceNow=true，agent 需直接调用 mimo_tts skill 脚本生成语音并发送（日常用 clone，唱歌用 preset），不再调用 speakLastTurn()。'
   };
 }
 
@@ -563,7 +579,7 @@ async function speakTurnPayload(turnResultPayload) {
   if (!validated.ok) {
     throw new Error(validated.error);
   }
-  const audio = await generateTtsAudio(validated.value.taggedTtsText, validated.value.naturalStylePrompt);
+  const audio = await generateTtsAudio(validated.value.visibleText, '');
   const state = loadState();
   if (state) saveState(storeLastGeneratedAudio(state, audio));
   let image = null;
@@ -675,7 +691,8 @@ function exitCyberGfHybrid() {
   return {
     kind: 'exited',
     state: next,
-    visibleText: '已退出赛博女友模式，记忆已经保存。'
+    visibleText: '已退出赛博女友模式，记忆已经保存。',
+    note: '退出前请让 agent 生成 sessionSummary 并调用 apply-session-summary 保存。'
   };
 }
 
@@ -767,14 +784,14 @@ async function handleHybridCommand(command, arg = '') {
   if (command === 'debug-off') return setCyberGfDebug(false);
   if (command === 'voice-delivery-info') return getLastVoiceDeliveryInfo();
   if (command === 'last-audio') return getLastGeneratedAudioInfo();
-  if (command === 'voice-send-payload') return getTelegramVoiceSendPayload(arg || 'telegram:8121382159');
+  if (command === 'voice-send-payload') return getTelegramVoiceSendPayload(arg || getDefaultTelegramTarget());
   if (command === 'run-start-flow') {
     const payload = readJsonArg(arg);
     return runStartFlow(payload);
   }
   if (command === 'run-turn-flow') {
     const payload = readJsonArg(arg);
-    return runTurnResultFlow(payload, { userMessage: payload.__userMessage || '', target: 'telegram:8121382159' });
+    return runTurnResultFlow(payload, { userMessage: payload.__userMessage || '', target: getDefaultTelegramTarget() });
   }
   if (command === 'turn-payload') {
     const payload = buildTurnPayload(arg || '在吗');
@@ -819,6 +836,38 @@ async function handleHybridCommand(command, arg = '') {
   if (command === 'fallback-turn') {
     return fallbackTurn(arg || '在吗');
   }
+  if (command === 'apply-session-summary') {
+    const summaryJson = readJsonArg(arg);
+    let state = loadState();
+    if (!state) {
+      return { kind: 'error', visibleText: '赛博女友模式当前未开启。' };
+    }
+    if (!Array.isArray(state.profile.sessionSummaries)) {
+      state.profile.sessionSummaries = [];
+    }
+    state.profile.sessionSummaries.push({
+      date: summaryJson.date || new Date().toISOString().slice(0, 10),
+      turnCount: summaryJson.turnCount || state.meta?.turnCount || 0,
+      summary: summaryJson.summary || '',
+      keyEvents: summaryJson.keyEvents || [],
+      emotionalTone: summaryJson.emotionalTone || ''
+    });
+    // 保留最近5个
+    if (state.profile.sessionSummaries.length > 5) {
+      const merged = state.profile.sessionSummaries.slice(0, -5).map(s => s.summary).join('；');
+      if (merged) {
+        state.revealedMemory.importantEvents = state.revealedMemory.importantEvents || [];
+        state.revealedMemory.importantEvents.push(`历史摘要: ${merged}`);
+      }
+      state.profile.sessionSummaries = state.profile.sessionSummaries.slice(-5);
+    }
+    state = saveState(state);
+    return {
+      kind: 'session_summary_applied',
+      visibleText: 'sessionSummary 已保存。',
+      state
+    };
+  }
   if (command === 'tts-last') {
     return {
       kind: 'tts_last',
@@ -851,7 +900,8 @@ async function main() {
     ['apply-start-payload', 'apply-start-payload'],
     ['generate-reference-photo', 'generate-reference-photo'],
     ['apply-turn-payload', 'apply-turn-payload'],
-    ['fallback-turn', 'fallback-turn']
+    ['fallback-turn', 'fallback-turn'],
+    ['apply-session-summary', 'apply-session-summary']
   ]);
 
   const command = commandMap.get(arg1);

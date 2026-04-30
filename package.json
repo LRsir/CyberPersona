@@ -1,0 +1,24 @@
+{
+  "name": "cyber-persona",
+  "version": "8.0.0",
+  "description": "赛博女友 — 基于 Hermes Agent 的角色扮演系统，支持情绪深度、TTS 语音、图片生成和游戏化",
+  "main": "cyber-gf-controller.js",
+  "scripts": {
+    "start": "node cyber-gf-controller.js 开始赛博女友",
+    "status": "node cyber-gf-controller.js status",
+    "test": "node -e \"require('./cyber-gf-state'); require('./cyber-gf-turn'); require('./cyber-gf-profile'); require('./cyber-gf-prompts'); require('./cyber-gf-gamification'); console.log('All modules loaded OK')\""
+  },
+  "keywords": [
+    "cyberpersona",
+    "roleplay",
+    "tts",
+    "telegram",
+    "hermes-agent",
+    "character-ai"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}
