@@ -408,12 +408,15 @@ function readJsonArg(fileOrJson) {
 }
 
 function buildTurnPayload(userMessage) {
+  const start = Date.now();
   // 检测 debug+ 前缀
   if (userMessage && userMessage.startsWith('debug+')) {
     return buildDebugTurnPayload(userMessage.slice(6).trim());
   }
   const turnContext = buildTurnContextPayload(userMessage);
   if (!turnContext) return null;
+  const elapsed = Date.now() - start;
+  console.error(`[perf] buildTurnPayload: ${elapsed}ms`);
   return {
     prompt: buildTurnAgentPrompt(turnContext),
     context: turnContext,
@@ -465,6 +468,7 @@ async function generateReferencePhoto() {
 }
 
 function applyTurnResultPayload(turnResultPayload, userMessage = '') {
+  const start = Date.now();
   const validated = validateTurnOutput(turnResultPayload);
   if (!validated.ok) {
     throw new Error(validated.error);
@@ -495,6 +499,8 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
   }
 
   state = saveState(state);
+  const elapsed = Date.now() - start;
+  console.error(`[perf] applyTurnResultPayload: ${elapsed}ms`);
   // debug+ 指令强制显示调试参数
   const isDebugCmd = userMessage && userMessage.startsWith('debug+');
   return {
