@@ -416,11 +416,13 @@ function buildTurnPayload(userMessage) {
   const turnContext = buildTurnContextPayload(userMessage);
   if (!turnContext) return null;
   const elapsed = Date.now() - start;
-  console.error(`[perf] buildTurnPayload: ${elapsed}ms`);
+  const timestamp = new Date().toISOString();
+  console.error(`[perf] buildTurnPayload: ${timestamp} (${elapsed}ms)`);
   return {
     prompt: buildTurnAgentPrompt(turnContext),
     context: turnContext,
     envPath: ENV_PATH,
+    _perfTimestamp: timestamp,
     note: '让 agent 生成 TurnResultPayload，然后调用 applyTurnResultPayload(payload, userMessage) 落盘。如 sendVoiceNow=true，agent 需直接调用 mimo_tts skill 脚本生成语音并发送（日常用 clone，唱歌用 preset），不再调用 speakLastTurn()。'
   };
 }
@@ -451,10 +453,12 @@ function applyInitialStatePayload(initialPayload) {
   let state = buildInitialState(validated.value);
   state = saveState(state);
   const elapsed = Date.now() - start;
-  console.error(`[perf] applyInitialStatePayload: ${elapsed}ms`);
+  const timestamp = new Date().toISOString();
+  console.error(`[perf] applyInitialStatePayload: ${timestamp} (${elapsed}ms)`);
   return {
     state,
-    openingMessage: validated.value.openingMessage
+    openingMessage: validated.value.openingMessage,
+    _perfTimestamp: timestamp
   };
 }
 
@@ -503,14 +507,16 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
 
   state = saveState(state);
   const elapsed = Date.now() - start;
-  console.error(`[perf] applyTurnResultPayload: ${elapsed}ms`);
+  const timestamp = new Date().toISOString();
+  console.error(`[perf] applyTurnResultPayload: ${timestamp} (${elapsed}ms)`);
   // debug+ 指令强制显示调试参数
   const isDebugCmd = userMessage && userMessage.startsWith('debug+');
   return {
     state,
     turnOutput: validated.value,
     debugText: buildTurnDebugInfo(validated.value, isDebugCmd),
-    gamification: gamificationResult
+    gamification: gamificationResult,
+    _perfTimestamp: timestamp
   };
 }
 
