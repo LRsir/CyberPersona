@@ -825,6 +825,25 @@ function createGamificationSystem(state) {
         affectionManager.addAffection(type);
       }
       
+      // 根据 stateDelta 扣除好感度（负面互动惩罚）
+      const stateDelta = details.stateDelta || {};
+      const ENUM_TO_INT = { major_decrease: -10, minor_decrease: -3, neutral: 0, minor_increase: 3, major_increase: 10 };
+      let negativeCount = 0;
+      let majorNegativeCount = 0;
+      for (const val of Object.values(stateDelta)) {
+        const intVal = ENUM_TO_INT[val] ?? 0;
+        if (intVal === -10) { negativeCount++; majorNegativeCount++; }
+        else if (intVal === -3) { negativeCount++; }
+      }
+      // 多维度同时下降 → 扣好感度
+      if (majorNegativeCount >= 2) {
+        affectionManager.addAffection('relationship_collapse', -30);
+      } else if (negativeCount >= 3) {
+        affectionManager.addAffection('relationship_conflict', -15);
+      } else if (majorNegativeCount >= 1) {
+        affectionManager.addAffection('relationship_setback', -8);
+      }
+      
       // 检查任务完成
       dailyTaskManager.checkAndComplete(type, details.history || []);
       

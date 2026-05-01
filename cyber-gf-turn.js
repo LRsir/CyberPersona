@@ -5,7 +5,7 @@ function validateTurnOutput(output) {
   if (!output || typeof output !== 'object') {
     return { ok: false, error: 'Turn output is not an object' };
   }
-  const requiredStringFields = ['visibleText', 'currentEmotion'];
+  const requiredStringFields = ['analysis', 'visibleText', 'currentEmotion'];
   for (const key of requiredStringFields) {
     if (typeof output[key] !== 'string' || !output[key].trim()) {
       return { ok: false, error: `Missing turn field: ${key}` };

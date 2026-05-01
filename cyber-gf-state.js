@@ -343,11 +343,11 @@ function getL2Factor(dimensionKey, personalitySettings) {
       // extraversion + openness affect closeness growth
       return baseFactor * (0.5 + (e + o) / 200); // ~0.75 ~ 2.0
     case 'neediness':
-      // neuroticism + low extraversion = high neediness sensitivity
-      return baseFactor * (0.5 + (100 - e + n) / 200); // ~0.75 ~ 2.0
+      // low extraversion = high neediness sensitivity (N already in baseFactor)
+      return baseFactor * (0.5 + (100 - e) / 200); // ~0.75 ~ 1.75
     case 'possessiveness':
-      // neuroticism + low agreeableness = high possessiveness
-      return baseFactor * (0.5 + (100 - a + n) / 200); // ~0.75 ~ 2.0
+      // low agreeableness = high possessiveness (N already in baseFactor)
+      return baseFactor * (0.5 + (100 - a) / 200); // ~0.75 ~ 1.75
     default:
       return baseFactor;
   }

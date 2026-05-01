@@ -604,7 +604,9 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
     const interactionType = validated.value.sendVoiceNow ? 'voice_message'
       : validated.value.sendImageNow ? 'photo_share'
       : 'daily_chat';
-    gamification.recordInteraction(interactionType);
+    gamification.recordInteraction(interactionType, {
+      stateDelta: validated.value.stateDelta || {}
+    });
     // 检查成就解锁
     gamificationResult = gamification.checkAll();
     // gamification managers modify state in-place via their references

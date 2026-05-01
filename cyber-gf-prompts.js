@@ -78,10 +78,10 @@ JSON 结构如下：
     "nicknameForUser": null,
     "nicknameForSelf": null,
     "sharedRoutines": [],
-    "revealedFacts": [],
-    "importantEvents": [],
+    "revealedFacts": [],       // ⚠️ 必须输出空数组！绝对不允许预设任何地理、经历、职业等事实，保留量子叠加态。所有事实必须在对话中自然坍缩。
+    "importantEvents": [],     // ⚠️ 必须输出空数组！重要事件在对话中自然产生。
     "lastSummary": "",
-    "emotionalMemories": []
+    "emotionalMemories": []    // ⚠️ 必须输出空数组！情绪记忆在首次情感体验时坍缩。
   },
   "openingStrategy": "",
   "openingMessage": ""
@@ -103,6 +103,7 @@ JSON 结构如下：
 - stressInit 是初始压力值（0-100），通常 10-30
 - emotionalProfile.baseline 描述她的核心情绪风格
 - emotionalProfile.vulnerabilityTopics 初始化为空数组
+- revealedMemoryInit 的所有数组字段必须为空（量子态原则：没有提及就是无限可能，一旦提及则立刻坍缩。绝对禁止在初始生成时预设任何地理、经历、职业等事实）
 - openingStrategy 是开场策略（emotion/schrodinger/observer），由种子随机决定：
   - "emotion"：纯情绪开场。写一句碎碎念或情绪发泄，绝对不要提及地点、天气、具体动作。只表达情绪或想法。
   - "schrodinger"：薛定谔提问。写一句带互动性的问句，把"观测"的任务交给用户。如"你猜猜我现在在干嘛？"
