@@ -377,6 +377,22 @@ function getWorldContext(state) {
   return Object.keys(result).length > 0 ? result : null;
 }
 
+/** 根据 appearance 标签直接拼装生图 prompt（不需要 LLM） */
+function buildImagePrompt(appearance) {
+  if (!appearance) return '';
+  const parts = [
+    '请生成一张高质量的年轻亚洲女性单人半身证件照。',
+    '画面要求：正面面向镜头，光线自然，背景为纯色或极简环境。',
+    '角色特征必须包含以下元素：',
+  ];
+  if (appearance.hair) parts.push(`发型：${appearance.hair}`);
+  if (appearance.skin) parts.push(`肤色：${appearance.skin}`);
+  if (appearance.eye) parts.push(`眼部：${appearance.eye}`);
+  if (appearance.bodyType) parts.push(`身材特征：${appearance.bodyType}`);
+  if (appearance.photoOutfit) parts.push(`当前穿着：${appearance.photoOutfit}`);
+  return parts.join('\n');
+}
+
 function buildTurnContextPayload(userMessage) {
   const { state, recentContext } = getStatePayload();
   if (!state) return null;
@@ -972,6 +988,7 @@ module.exports = {
   getStatePayload,
   buildStartPayload,
   buildTurnPayload,
+  buildImagePrompt,
   buildVoiceSendPayloadFromAudio,
   buildUnifiedDelivery,
   applyInitialStatePayload,
