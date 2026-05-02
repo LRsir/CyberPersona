@@ -238,8 +238,55 @@ function resolveInitialProfilePayload(output, options = {}) {
   };
 }
 
-function buildInitialState(initialProfileOutput) {
+/**
+ * 构建初始状态（v3 角色卡版本）
+ * @param {object} seed - 脚本生成的种子数据（systemBase + appearance + voice + openingStrategy）
+ * @param {object} llmOutput - LLM 生成的补充数据（signatureLine + openingMessage + emotionalProfile）
+ */
+function buildInitialState(seed, llmOutput) {
   const base = createEmptyState();
+  const output = llmOutput || {};
+
+  // 从 seed 填充 characterCard
+  const characterCard = { ...base.characterCard };
+  if (seed) {
+    characterCard.systemBase = {
+      bigFive: seed.bigFive || base.characterCard.systemBase.bigFive,
+      personalityArchetype: seed.personalityArchetype || '',
+      openingStrategy: seed.openingStrategy || ''
+    };
+    characterCard.appearance = {
+      ...(seed.appearance || {}),
+      bodyType: seed.appearance?.bodyType || ''
+    };
+    characterCard.voice = {
+      voiceStyle: seed.voiceStyle || ''
+    };
+  }
+
+  // LLM 生成的签名语
+  if (output.signatureLine) {
+    characterCard.signatureLine = String(output.signatureLine).trim();
+  }
+
+  // LLM 生成的证件照路径
+  if (output.referencePhotoPath) {
+    characterCard.referencePhotoPath = String(output.referencePhotoPath).trim();
+  }
+
+  // 从 bigFive 映射 personalitySettings
+  const bigFive = characterCard.systemBase.bigFive;
+  const personalitySettings = {
+    openness: bigFive.o ?? 50,
+    conscientiousness: bigFive.c ?? 50,
+    extraversion: bigFive.e ?? 50,
+    agreeableness: bigFive.a ?? 50,
+    neuroticism: bigFive.n ?? 50
+  };
+
+  // 计算初始关系值
+  const dynamicStateInit = output.dynamicStateInit || computeInitialDynamicState(personalitySettings);
+
   const state = {
     ...base,
     mode: {
@@ -251,33 +298,35 @@ function buildInitialState(initialProfileOutput) {
       sessionCount: 1,
       turnCount: 0
     },
+    characterCard,
+    personalitySettings,
+    // 保留旧版 profile 结构（兼容过渡期）
     profile: {
       ...base.profile,
-      ...initialProfileOutput.profile
-    },
-    personalitySettings: {
-      ...base.personalitySettings,
-      ...(initialProfileOutput.personalitySettings || {})
+      ...(output.profile || {}),
+      appearance: characterCard.appearance ? JSON.stringify(characterCard.appearance) : '',
+      referencePhotoPath: characterCard.referencePhotoPath,
+      coreSummary: output.profile?.coreSummary || characterCard.systemBase.personalityArchetype
     },
     dynamicState: {
       ...base.dynamicState,
-      ...initialProfileOutput.dynamicStateInit
+      ...dynamicStateInit
     },
-    stress: initialProfileOutput.stressInit ?? FALLBACK_STRESS,
+    stress: output.stressInit ?? FALLBACK_STRESS,
     shortTermState: {
       ...base.shortTermState,
-      ...initialProfileOutput.shortTermStateInit
+      ...(output.shortTermStateInit || {})
     },
     revealedMemory: {
       ...base.revealedMemory,
-      ...initialProfileOutput.revealedMemoryInit
+      ...(output.revealedMemoryInit || {})
     },
     sessionSummaries: []
   };
 
   // Include emotionalProfile if the LLM provided one
-  if (initialProfileOutput.emotionalProfile) {
-    state.emotionalProfile = initialProfileOutput.emotionalProfile;
+  if (output.emotionalProfile) {
+    state.profile.emotionalProfile = output.emotionalProfile;
   }
 
   return state;

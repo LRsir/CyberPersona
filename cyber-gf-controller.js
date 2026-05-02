@@ -12,7 +12,8 @@ const {
   isDebugEnabled,
   storeLastGeneratedAudio,
   storeLastGeneratedImage,
-  updateSessionStartTime
+  updateSessionStartTime,
+  getCardFlatValues
 } = require('./cyber-gf-state');
 const { buildInitialState, validateInitialProfile } = require('./cyber-gf-profile');
 const { validateTurnOutput, createFallbackTurnOutput } = require('./cyber-gf-turn');
@@ -395,6 +396,7 @@ function buildTurnContextPayload(userMessage) {
     dynamicState: state.dynamicState,
     shortTermState: state.shortTermState,
     revealedMemory: state.revealedMemory,
+    characterCard: getCardFlatValues(state.characterCard || {}),
     worldContext: getWorldContext(state),
     recentContext: (recentContext || []).slice(-10),
     userMessage

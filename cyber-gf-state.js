@@ -25,7 +25,7 @@ function getStatePath() {
 
 function createEmptyState() {
   return {
-    version: 2,
+    version: 3,
     mode: {
       enabled: false,
       type: 'cyber_girlfriend'
@@ -36,6 +36,45 @@ function createEmptyState() {
       sessionCount: 0,
       turnCount: 0
     },
+    // ── 角色信息模板（唯一数据源）────────────────────
+    characterCard: {
+      // ★ 创世阶段：脚本生成，不可变
+      systemBase: {
+        bigFive: { o: 50, c: 50, e: 50, a: 50, n: 50 },
+        personalityArchetype: '',
+        openingStrategy: ''
+      },
+      appearance: {
+        hair: '', skin: '', eye: '', clothing: '', bodyType: ''
+      },
+      voice: {
+        voiceStyle: ''
+      },
+      // ★ 初始化阶段：LLM 生成一次，后续不可变
+      signatureLine: '',
+      referencePhotoPath: '',
+      // ★ 量子态字段：初始为空，对话中逐步揭露
+      identity: {},           // 动态 KV：age, birthday, zodiac, bloodType, profession...
+      physicalTraits: {},     // 动态 KV：height, weight, features, tattoo...
+      personalitySelfDescription: {}, // 动态 KV：mbti, selfEval, tags...
+      preferences: {},        // 动态 KV：likes, dislikes, values...
+      innerWorld: {},         // 动态 KV：vulnerability, secret, worries, location...
+      habits: {},             // LLM 总结：speechHabit, quirk, emotionExpression...
+      memories: {
+        events: [],           // { text, timestamp }
+        milestones: [],       // { text, timestamp }
+        gifts: []             // { text, timestamp }
+      }
+    },
+    // ── L2 性格设定（从 systemBase.bigFive 映射）────────
+    personalitySettings: {
+      neuroticism: 50,
+      agreeableness: 50,
+      openness: 50,
+      conscientiousness: 50,
+      extraversion: 50
+    },
+    // ── 旧版 profile（v2 兼容，逐步废弃）────────────
     profile: {
       coreSummary: '',
       relationshipSummary: '',
@@ -52,13 +91,6 @@ function createEmptyState() {
         vulnerabilityTopics: []
       },
       sessionSummaries: []
-    },
-    personalitySettings: {
-      neuroticism: 50,
-      agreeableness: 50,
-      openness: 50,
-      conscientiousness: 50,
-      extraversion: 50
     },
     dynamicState: {
       trust: 30,
@@ -145,6 +177,61 @@ function createEmptyState() {
   };
 }
 
+/** 修复并验证 characterCard 结构 */
+function _repairCharacterCard(base, state) {
+  const cc = state || {};
+  const result = {
+    systemBase: {
+      bigFive: { ...base.systemBase.bigFive, ...(cc.systemBase?.bigFive || {}) },
+      personalityArchetype: cc.systemBase?.personalityArchetype || base.systemBase.personalityArchetype,
+      openingStrategy: cc.systemBase?.openingStrategy || base.systemBase.openingStrategy
+    },
+    appearance: { ...base.appearance, ...(cc.appearance || {}) },
+    voice: { ...base.voice, ...(cc.voice || {}) },
+    signatureLine: typeof cc.signatureLine === 'string' ? cc.signatureLine : '',
+    referencePhotoPath: typeof cc.referencePhotoPath === 'string' ? cc.referencePhotoPath : '',
+    identity: _repairQuantumKV(cc.identity),
+    physicalTraits: _repairQuantumKV(cc.physicalTraits),
+    personalitySelfDescription: _repairQuantumKV(cc.personalitySelfDescription),
+    preferences: _repairQuantumKV(cc.preferences),
+    innerWorld: _repairQuantumKV(cc.innerWorld),
+    habits: _repairQuantumKV(cc.habits),
+    memories: _repairMemories(cc.memories)
+  };
+  return result;
+}
+
+/** 修复量子态动态 KV 对象（支持 revision） */
+function _repairQuantumKV(obj) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
+  const result = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (key === '_revisions') continue; // 跳过 revision 元数据
+    if (val && typeof val === 'object' && !Array.isArray(val) && 'value' in val) {
+      // 带 revision 的格式：{ value, _revisions: [...] }
+      result[key] = {
+        value: String(val.value),
+        _revisions: Array.isArray(val._revisions) ? val._revisions.slice(-5) : []
+      };
+    } else if (typeof val === 'string' || typeof val === 'number') {
+      // 简单值格式
+      result[key] = String(val);
+    }
+  }
+  return result;
+}
+
+/** 修复 memories 数组结构 */
+function _repairMemories(mem) {
+  const base = { events: [], milestones: [], gifts: [] };
+  if (!mem || typeof mem !== 'object') return base;
+  return {
+    events: Array.isArray(mem.events) ? mem.events.slice(-20) : [],
+    milestones: Array.isArray(mem.milestones) ? mem.milestones.slice(-20) : [],
+    gifts: Array.isArray(mem.gifts) ? mem.gifts.slice(-20) : []
+  };
+}
+
 function repairState(state) {
   const base = createEmptyState();
 
@@ -183,11 +270,45 @@ function repairState(state) {
     state.version = 2;
   }
 
+  // v2 → v3: 引入 characterCard 角色信息模板
+  if (state.version < 3) {
+    if (!state.characterCard) {
+      state.characterCard = {
+        systemBase: {
+          bigFive: state.personalitySettings ? {
+            o: state.personalitySettings.openness ?? 50,
+            c: state.personalitySettings.conscientiousness ?? 50,
+            e: state.personalitySettings.extraversion ?? 50,
+            a: state.personalitySettings.agreeableness ?? 50,
+            n: state.personalitySettings.neuroticism ?? 50
+          } : { o: 50, c: 50, e: 50, a: 50, n: 50 },
+          personalityArchetype: '',
+          openingStrategy: ''
+        },
+        appearance: {
+          hair: '', skin: '', eye: '', clothing: '', bodyType: ''
+        },
+        voice: { voiceStyle: '' },
+        signatureLine: '',
+        referencePhotoPath: state.profile?.referencePhotoPath || '',
+        identity: {},
+        physicalTraits: {},
+        personalitySelfDescription: {},
+        preferences: {},
+        innerWorld: {},
+        habits: {},
+        memories: { events: [], milestones: [], gifts: [] }
+      };
+    }
+    state.version = 3;
+  }
+
   const repaired = {
     ...base,
     ...state,
     mode: { ...base.mode, ...(state?.mode || {}) },
     meta: { ...base.meta, ...(state?.meta || {}) },
+    characterCard: _repairCharacterCard(base.characterCard, state?.characterCard),
     profile: {
       ...base.profile,
       ...(state?.profile || {}),
@@ -624,6 +745,111 @@ function mergeMemoryUpdate(revealedMemory, memoryUpdate = {}) {
   return next;
 }
 
+// ── 量子态 KV 写入（带 revision）────────────────────────
+const REVISION_CATEGORIES = new Set(['identity', 'physicalTraits', 'innerWorld']);
+
+/** 根据 key 推断所属 characterCard 分类 */
+function _inferCategory(key) {
+  const k = String(key).toLowerCase();
+  const identityKeys = ['age', 'birthday', 'zodiac', 'bloodtype', 'profession', 'hometown', 'education'];
+  const physicalKeys = ['height', 'weight', 'features', 'tattoo', 'bodytype', 'hair', 'skin'];
+  const preferenceKeys = ['likes', 'dislikes', 'values', 'hobby', 'food'];
+  const innerKeys = ['vulnerability', 'secret', 'worries', 'location', 'fear', 'wish', 'dream'];
+  const habitKeys = ['speechhabit', 'quirk', 'emotion', 'mbti', 'tags', 'speechstyle'];
+  if (identityKeys.some(kk => k.includes(kk))) return 'identity';
+  if (physicalKeys.some(kk => k.includes(kk))) return 'physicalTraits';
+  if (preferenceKeys.some(kk => k.includes(kk))) return 'preferences';
+  if (innerKeys.some(kk => k.includes(kk))) return 'innerWorld';
+  if (habitKeys.some(kk => k.includes(kk))) return 'habits';
+  return 'identity'; // 默认归入身份
+}
+
+/**
+ * 向 characterCard 的量子态分类中写入新信息
+ * @param {object} card - characterCard 对象
+ * @param {string} category - 分类名（identity, physicalTraits, habits 等）
+ * @param {string} key - 键名
+ * @param {string} value - 值
+ * @returns {object} 更新后的 characterCard
+ */
+function revealCardField(card, category, key, value) {
+  const next = { ...card };
+  if (!next[category] || typeof next[category] !== 'object') {
+    next[category] = {};
+  }
+  const cat = { ...next[category] };
+  const strValue = String(value).trim();
+  const strKey = String(key).trim();
+
+  if (!strKey || !strValue) return next;
+
+  // 需要 revision 的分类（identity, physicalTraits, innerWorld）
+  if (REVISION_CATEGORIES.has(category)) {
+    const existing = cat[strKey];
+    if (existing && typeof existing === 'object' && 'value' in existing) {
+      // 已有值且不同 → 旧值压入 revision
+      if (existing.value !== strValue) {
+        const revisions = Array.isArray(existing._revisions) ? [...existing._revisions] : [];
+        revisions.push({ value: existing.value, timestamp: nowIso() });
+        cat[strKey] = { value: strValue, _revisions: revisions.slice(-5) };
+      }
+    } else {
+      // 首次写入
+      cat[strKey] = { value: strValue, _revisions: [] };
+    }
+  } else {
+    // 其他分类：直接覆盖（habits, preferences, personalitySelfDescription）
+    cat[strKey] = strValue;
+  }
+
+  next[category] = cat;
+  return next;
+}
+
+/**
+ * 向 memories 数组中追加条目
+ * @param {object} card - characterCard 对象
+ * @param {string} type - events / milestones / gifts
+ * @param {string} text - 条目文本
+ * @returns {object} 更新后的 characterCard
+ */
+function appendCardMemory(card, type, text) {
+  const next = { ...card };
+  if (!next.memories) next.memories = { events: [], milestones: [], gifts: [] };
+  const mem = { ...next.memories };
+  if (!Array.isArray(mem[type])) mem[type] = [];
+  const strText = String(text).trim();
+  if (!strText) return next;
+  // 去重
+  if (mem[type].some(m => m.text === strText)) return next;
+  mem[type] = [...mem[type], { text: strText, timestamp: nowIso() }].slice(-20);
+  next.memories = mem;
+  return next;
+}
+
+/**
+ * 获取 characterCard 量子态字段的纯值（剥离 revision 元数据）
+ * 用于成就检测和 prompt 上下文
+ */
+function getCardFlatValues(card) {
+  const result = {};
+  const kvCategories = ['identity', 'physicalTraits', 'personalitySelfDescription', 'preferences', 'innerWorld', 'habits'];
+  for (const cat of kvCategories) {
+    const obj = card[cat] || {};
+    result[cat] = {};
+    for (const [key, val] of Object.entries(obj)) {
+      if (key === '_revisions') continue;
+      if (val && typeof val === 'object' && 'value' in val) {
+        result[cat][key] = val.value;
+      } else {
+        result[cat][key] = val;
+      }
+    }
+  }
+  result.memories = card.memories || { events: [], milestones: [], gifts: [] };
+  return result;
+}
+
 function storeLastTurnTts(state, turnOutput) {
   const next = repairState(state);
   next.runtimeCache.lastTurnTts = {
@@ -694,6 +920,77 @@ function applyTurnResult(state, turnOutput) {
   next.stress = decayStress(next.stress, next.personalitySettings);
   next.shortTermState = applyShortTermUpdate(next.shortTermState, turnOutput.shortTermUpdate || {});
   next.revealedMemory = mergeMemoryUpdate(next.revealedMemory, turnOutput.memoryUpdate || {});
+
+  // ── CharacterCard 更新（量子态字段揭露）──────────────
+  if (turnOutput.characterCardUpdate) {
+    const ccUpdate = turnOutput.characterCardUpdate;
+    // 处理 KV 分类的揭露
+    const kvCategories = ['identity', 'physicalTraits', 'personalitySelfDescription', 'preferences', 'innerWorld', 'habits'];
+    for (const cat of kvCategories) {
+      if (ccUpdate[cat] && typeof ccUpdate[cat] === 'object') {
+        for (const [key, val] of Object.entries(ccUpdate[cat])) {
+          if (val !== null && val !== undefined && String(val).trim()) {
+            next.characterCard = revealCardField(next.characterCard, cat, key, String(val));
+          }
+        }
+      }
+    }
+    // 处理 memories 追加
+    if (ccUpdate.memories) {
+      for (const type of ['events', 'milestones', 'gifts']) {
+        if (Array.isArray(ccUpdate.memories[type])) {
+          for (const item of ccUpdate.memories[type]) {
+            const text = typeof item === 'string' ? item : (item?.text || '');
+            if (text.trim()) {
+              next.characterCard = appendCardMemory(next.characterCard, type, text);
+            }
+          }
+        }
+      }
+    }
+    // 处理签名语（仅首次）
+    if (ccUpdate.signatureLine && !next.characterCard.signatureLine) {
+      next.characterCard.signatureLine = String(ccUpdate.signatureLine).trim();
+    }
+  }
+
+  // 同步旧版 revealedMemory → characterCard（兼容过渡期）
+  if (turnOutput.memoryUpdate) {
+    const mu = turnOutput.memoryUpdate;
+    // speechHabits → characterCard.habits.speechHabit
+    if (mu.speechHabitsAdd && typeof mu.speechHabitsAdd === 'string' && mu.speechHabitsAdd.trim()) {
+      if (!next.characterCard.habits?.speechHabit) {
+        next.characterCard = revealCardField(next.characterCard, 'habits', 'speechHabit', mu.speechHabitsAdd.trim());
+      }
+    }
+    // quirks → characterCard.habits.quirk
+    if (mu.quirksAdd && typeof mu.quirksAdd === 'string' && mu.quirksAdd.trim()) {
+      if (!next.characterCard.habits?.quirk) {
+        next.characterCard = revealCardField(next.characterCard, 'habits', 'quirk', mu.quirksAdd.trim());
+      }
+    }
+    // emotionalExpression → characterCard.habits.emotionExpression
+    if (mu.emotionalExpressionAdd?.emotion && mu.emotionalExpressionAdd?.expression) {
+      const key = `emotion_${mu.emotionalExpressionAdd.emotion}`;
+      if (!next.characterCard.habits?.[key]) {
+        next.characterCard = revealCardField(next.characterCard, 'habits', key, mu.emotionalExpressionAdd.expression);
+      }
+    }
+    // locationUpdate → characterCard.innerWorld
+    if (mu.locationUpdate?.current) {
+      next.characterCard = revealCardField(next.characterCard, 'innerWorld', 'location', mu.locationUpdate.current);
+    }
+    // revealedFactsAdd → 对应 characterCard 分类
+    if (Array.isArray(mu.revealedFactsAdd)) {
+      for (const fact of mu.revealedFactsAdd) {
+        if (fact?.key && fact?.value) {
+          const cat = _inferCategory(fact.key);
+          next.characterCard = revealCardField(next.characterCard, cat, fact.key, fact.value);
+        }
+      }
+    }
+  }
+
   next = storeLastTurnTts(next, turnOutput);
   next = incrementTurnCount(next);
 
@@ -785,5 +1082,9 @@ module.exports = {
   enumToInt,
   getL2Factor,
   getMoodFactor,
-  decayStress
+  decayStress,
+  // CharacterCard 系列
+  revealCardField,
+  appendCardMemory,
+  getCardFlatValues
 };

@@ -100,6 +100,25 @@ function validateTurnOutput(output) {
   }
   if (output.memoryUpdate.quirksAdd === undefined) output.memoryUpdate.quirksAdd = null;
 
+  // characterCardUpdate is optional, default empty
+  if (!output.characterCardUpdate || typeof output.characterCardUpdate !== 'object') {
+    output.characterCardUpdate = {};
+  }
+  const ccUpdate = output.characterCardUpdate;
+  const ccKVCategories = ['identity', 'physicalTraits', 'personalitySelfDescription', 'preferences', 'innerWorld', 'habits'];
+  for (const cat of ccKVCategories) {
+    if (!ccUpdate[cat] || typeof ccUpdate[cat] !== 'object' || Array.isArray(ccUpdate[cat])) {
+      ccUpdate[cat] = {};
+    }
+  }
+  if (!ccUpdate.memories || typeof ccUpdate.memories !== 'object') {
+    ccUpdate.memories = { events: [], milestones: [], gifts: [] };
+  }
+  for (const type of ['events', 'milestones', 'gifts']) {
+    if (!Array.isArray(ccUpdate.memories[type])) ccUpdate.memories[type] = [];
+  }
+  if (ccUpdate.signatureLine === undefined) ccUpdate.signatureLine = null;
+
   return { ok: true, value: output };
 }
 
@@ -156,6 +175,16 @@ function createFallbackTurnOutput(userMessage) {
       speechHabitsAdd: null,
       quirksAdd: null,
       vulnerabilityTopicsAdd: null
+    },
+    characterCardUpdate: {
+      identity: {},
+      physicalTraits: {},
+      personalitySelfDescription: {},
+      preferences: {},
+      innerWorld: {},
+      habits: {},
+      memories: { events: [], milestones: [], gifts: [] },
+      signatureLine: null
     }
   };
 }
