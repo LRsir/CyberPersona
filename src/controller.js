@@ -582,18 +582,6 @@ function applyInitialStatePayload(initialPayload) {
   };
 }
 
-/**
- * Generate a reference ID photo from the character's appearance description.
- * This photo is used as the base for all subsequent character images (edit API).
- */
-/**
- * @deprecated Agent calls image-api skill scripts directly for reference photo generation.
- * Kept as CLI entry for backward compat only.
- */
-async function generateReferencePhoto() {
-  throw new Error("generateReferencePhoto is deprecated. Agent should call image-api skill directly.");
-}
-
 function applyTurnResultPayload(turnResultPayload, userMessage = '') {
   const start = Date.now();
   const validated = validateTurnOutput(turnResultPayload);
@@ -640,29 +628,6 @@ function applyTurnResultPayload(turnResultPayload, userMessage = '') {
     gamification: gamificationResult,
     _perfTimestamp: timestamp
   };
-}
-
-/**
- * Generate a character image. Uses edit API with reference photo if available,
- * otherwise falls back to generate API. Ensures visual consistency.
- */
-/**
- * @deprecated Agent calls image-api skill scripts directly for character image generation.
- */
-async function generateCharacterImage(imagePrompt) {
-  throw new Error("generateCharacterImage is deprecated. Agent should call image-api skill directly.");
-}
-
-async function speakLastTurn() {
-  throw new Error('speakLastTurn is deprecated. Agent calls mimo-tts skill directly.');
-}
-
-async function speakTurnPayload(turnResultPayload) {
-  throw new Error('speakTurnPayload is deprecated. Agent calls mimo-tts/image-api skills directly.');
-}
-
-async function runTurnResultFlow(turnResultPayload, options = {}) {
-  throw new Error('runTurnResultFlow is deprecated. Use build-turn-prompt → apply-turn-result flow instead.');
 }
 
 async function runStartFlow(initialPayload) {
@@ -812,10 +777,6 @@ async function handleHybridCommand(command, arg = '') {
     const payload = readJsonArg(arg);
     return runStartFlow(payload);
   }
-  if (command === 'run-turn-flow') {
-    const payload = readJsonArg(arg);
-    return runTurnResultFlow(payload, { userMessage: payload.__userMessage || '', target: getDefaultTelegramTarget() });
-  }
   if (command === 'turn-payload') {
     const payload = buildTurnPayload(arg || '在吗');
     if (!payload) {
@@ -836,12 +797,6 @@ async function handleHybridCommand(command, arg = '') {
       kind: 'applied_start_payload',
       visibleText: result.openingMessage,
       state: result.state
-    };
-  }
-  if (command === 'generate-reference-photo') {
-    return {
-      kind: 'deprecated',
-      visibleText: 'generate-reference-photo 已废弃。请直接调用 image-api skill：\npython3 ~/.hermes/skills/image-api/scripts/image_api.py --json --size 1024x1024 --quality low --format png --moderation low "standard portrait photo, head and shoulders, neutral background, looking at camera, <appearance>"'
     };
   }
   if (command === 'apply-turn-payload') {
@@ -889,12 +844,6 @@ async function handleHybridCommand(command, arg = '') {
       state
     };
   }
-  if (command === 'tts-last') {
-    return {
-      kind: 'deprecated',
-      visibleText: 'tts-last 已废弃。agent 直接调用 mimo-tts skill 脚本生成语音。'
-    };
-  }
   return {
     kind: 'error',
     visibleText: `未知命令: ${command}`
@@ -916,10 +865,8 @@ async function main() {
     ['last-audio', 'last-audio'],
     ['voice-send-payload', 'voice-send-payload'],
     ['run-start-flow', 'run-start-flow'],
-    ['run-turn-flow', 'run-turn-flow'],
     ['turn-payload', 'turn-payload'],
     ['apply-start-payload', 'apply-start-payload'],
-    ['generate-reference-photo', 'generate-reference-photo'],
     ['apply-turn-payload', 'apply-turn-payload'],
     ['fallback-turn', 'fallback-turn'],
     ['apply-session-summary', 'apply-session-summary']
@@ -927,7 +874,7 @@ async function main() {
 
   const command = commandMap.get(arg1);
   if (!command) {
-    console.log('可用命令：开始赛博女友 / 退出赛博女友 / 我们分手吧 / status / debug-last / debug-on / debug-off / voice-delivery-info / last-audio / voice-send-payload / run-start-flow / run-turn-flow / turn-payload / apply-start-payload / apply-turn-payload / fallback-turn');
+    console.log('可用命令：开始赛博女友 / 退出赛博女友 / 我们分手吧 / status / debug-last / debug-on / debug-off / voice-delivery-info / last-audio / voice-send-payload / run-start-flow / turn-payload / apply-start-payload / apply-turn-payload / fallback-turn / apply-session-summary');
     process.exit(0);
   }
 
@@ -959,9 +906,7 @@ module.exports = {
   buildUnifiedDelivery,
   applyInitialStatePayload,
   applyTurnResultPayload,
-  speakTurnPayload,
   runStartFlow,
-  runTurnResultFlow,
   startCyberGfHybrid,
   exitCyberGfHybrid,
   breakupCyberGfHybrid,
