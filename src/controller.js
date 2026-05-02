@@ -50,7 +50,14 @@ function appendHistory(role, text) {
 }
 
 function getRecentContext(limit = 10) {
-  return loadHistory().slice(-limit).map(({ role, text }) => ({ role, text }));
+  const raw = loadHistory().slice(-limit).map(({ role, text }) => ({ role, text }));
+  // 去重：连续相同 role+text 的条目只保留最后一条
+  const deduped = [];
+  for (let i = 0; i < raw.length; i++) {
+    if (i > 0 && raw[i].role === raw[i-1].role && raw[i].text === raw[i-1].text) continue;
+    deduped.push(raw[i]);
+  }
+  return deduped;
 }
 
 function formatStatus(state) {

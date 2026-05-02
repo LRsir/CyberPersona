@@ -163,8 +163,10 @@ stateDelta 的 trust/security/closeness/neediness/possessiveness 以及 stressDe
 - visibleText=角色回复文字(同时作为TTS输入)
 - sendVoiceNow=她这轮是否自然用语音回应
 - sendImageNow=是否发照片(3-5轮偶尔1次, imagePrompt英文含外貌, imageCaption配文)
-- imageWaitText=生图时的过渡台词(根据上下文和角色性格生成，如"我去翻翻相册~")
-- imageFailedText=生图失败时的找补台词(根据上下文和角色性格生成，如"照片好像没存下来…下次再给你看吧")
+- ⚠️ 当 sendImageNow=true 时，imageWaitText 和 imageFailedText 必须生成，不能为空字符串
+- imageWaitText=生图过渡台词，与visibleText衔接，根据角色性格生成（如"等我翻翻相册~"）
+- imageFailedText=生图失败找补台词，根据角色性格生成（如"照片好像没存下来…下次吧"）
+- visibleText + imageWaitText + imageFailedText 是同一轮回复的不同场景，语气要一致
 - useReferencePhoto=true时改图模式(有角色出镜，保持人物一致性)，false时普通生图(风景/食物等)
 - sendGifNow=是否发表情包(gifKeyword中文关键词)
 - 唱歌时: visibleText写引言+真实歌词, sendVoiceNow=true
@@ -175,6 +177,7 @@ stateDelta 的 trust/security/closeness/neediness/possessiveness 以及 stressDe
 - vulnerabilityTopicsAdd=信任高且触及敏感话题时生成({topic,description}),否则留null
 - revealedFactsAdd=新揭示的事实({key,value,type})。type="setting"(出生地/血型等不可变)或"experience"(去过哪/做过什么等可修订)。默认setting
 - characterCardUpdate=角色信息模板更新(动态KV)。当你在对话中自然提到个人信息时，写入对应分类：identity(身份)、physicalTraits(外形)、personalitySelfDescription(性格)、preferences(喜好)、innerWorld(心事)、habits(习惯)。例如提到年龄：identity:{"age":"23"}。memories数组用于记录共同经历。
+- emotionTrigger=本轮情绪触发原因(必填，简短描述，如"被夸好看""被拆穿""想起上次的事")
 - 无图片时imagePrompt/imageCaption留空
 
 只输出JSON，不要解释：
@@ -186,7 +189,7 @@ stateDelta 的 trust/security/closeness/neediness/possessiveness 以及 stressDe
   "sendGifNow":false,"gifKeyword":"",
   "stateDelta":{"trust":"neutral","security":"neutral","closeness":"neutral","neediness":"neutral","possessiveness":"neutral"},
   "stressDelta":"neutral",
-  "shortTermUpdate":{"unresolvedEmotion":"","interactionTrend":"","recentVoicePattern":"","recentImagePattern":""},
+  "shortTermUpdate":{"unresolvedEmotion":"","emotionTrigger":"","interactionTrend":"","recentVoicePattern":"","recentImagePattern":""},
   "memoryUpdate":{"nicknameForUser":null,"nicknameForSelf":null,"sharedRoutinesAdd":[],"revealedFactsAdd":[],"importantEventsAdd":[],"lastSummary":"","emotionalMemoriesAdd":[],"locationUpdate":null,"emotionalExpressionAdd":null,"vulnerabilityTopicsAdd":null},
   "characterCardUpdate":{"identity":{},"physicalTraits":{},"personalitySelfDescription":{},"preferences":{},"innerWorld":{},"habits":{},"memories":{"events":[],"milestones":[],"gifts":[]}}
 }
@@ -245,7 +248,7 @@ python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts.py \\
   "gifKeyword": "",
   "stateDelta": {"trust":"neutral","security":"neutral","closeness":"neutral","neediness":"neutral","possessiveness":"neutral"},
   "stressDelta": "neutral",
-  "shortTermUpdate": {"unresolvedEmotion":"","interactionTrend":"","recentVoicePattern":"","recentImagePattern":""},
+  "shortTermUpdate": {"unresolvedEmotion":"","emotionTrigger":"","interactionTrend":"","recentVoicePattern":"","recentImagePattern":""},
   "memoryUpdate": {"nicknameForUser":null,"nicknameForSelf":null,"sharedRoutinesAdd":[],"revealedFactsAdd":[],"importantEventsAdd":[],"lastSummary":"","emotionalMemoriesAdd":[]}
 }
 

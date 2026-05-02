@@ -951,9 +951,9 @@ function applyTurnResult(state, turnOutput) {
   // Push currentEmotion to emotionHistory
   if (turnOutput.currentEmotion) {
     const hist = Array.isArray(next.shortTermState.emotionHistory) ? next.shortTermState.emotionHistory : [];
-    // Use LLM-provided trigger from shortTermUpdate, fallback to empty
-    const trigger = (turnOutput.shortTermUpdate?.unresolvedEmotion && turnOutput.shortTermUpdate.unresolvedEmotion !== 'none')
-      ? turnOutput.shortTermUpdate.unresolvedEmotion
+    // Use LLM-provided emotionTrigger from shortTermUpdate
+    const trigger = (turnOutput.shortTermUpdate?.emotionTrigger && turnOutput.shortTermUpdate.emotionTrigger !== '')
+      ? turnOutput.shortTermUpdate.emotionTrigger
       : '';
     hist.push({
       emotion: turnOutput.currentEmotion,

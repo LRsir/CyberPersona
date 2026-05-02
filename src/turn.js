@@ -172,6 +172,7 @@ function createFallbackTurnOutput(userMessage) {
     stressDelta: 'neutral',
     shortTermUpdate: {
       unresolvedEmotion: 'none',
+      emotionTrigger: '',
       interactionTrend: 'steady',
       recentVoicePattern: 'none',
       recentImagePattern: 'none',
