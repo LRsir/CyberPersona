@@ -1,5 +1,16 @@
 # Changelog
 
+## v10.4.0 (2026-05-03)
+
+### SKILL.md 精简重写
+
+- 731 行 → 183 行，删除所有项目介绍性内容
+- 只保留 agent 操作需要的内容：命令、Turn 流程、JSON 模板、投递细节、Pitfalls
+- 删除：四层架构理论、Big Five 说明、调制公式、Stress 系统理论、State Narrative、游戏化细节、Debug 输出格式、Character Response Guidelines
+- 这些内容属于 README 和代码注释，不属于 SKILL.md
+
+---
+
 ## v10.3.0 (2026-05-03)
 
 ### Turn 流程 v2.0 规范化重构

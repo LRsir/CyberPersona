@@ -1,6 +1,6 @@
 {
   "name": "cyber-persona",
-  "version": "10.3.0",
+  "version": "10.4.0",
   "description": "赛博女友 — 基于 Hermes Agent 的角色扮演系统，支持角色卡、量子态、TTS 语音、图片生成和游戏化",
   "main": "src/controller.js",
   "scripts": {

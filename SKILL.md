@@ -1,419 +1,120 @@
 ---
 name: cyber-persona
-description: "Run CyberPersona (赛博女友) roleplay mode — quantum-state character generation, Big Five personality, 5-dimension relationship system, stress modulation, enum-based state deltas, three opening strategies, world sync (weather/holidays/time), TTS voice, image, sticker delivery on Telegram."
-version: 10.3.0
+description: "Run CyberPersona (赛博女友) roleplay mode — persistent character on Telegram with voice, image, sticker delivery."
+version: 10.4.0
 metadata:
   hermes:
-    tags: [cyberpersona, roleplay, tts, telegram, voice, image, gamification, emotion, sticker, quantum-state, big-five]
+    tags: [cyberpersona, roleplay, tts, telegram, voice, image, sticker]
     related_skills: [hermes-agent, image-api, mimo-v2-5-tts, mood-sticker]
 ---
 
-# CyberPersona (赛博女友) Agent Workflow
+# CyberPersona Agent Workflow
 
-CyberPersona is a character roleplay system at `~/.hermes/CyberPersona-hermes`. The agent generates structured `TurnResultPayload` JSON responses as a persistent character, applies state changes, generates TTS audio, and delivers voice messages as native Telegram voice bubbles.
+**Project:** `~/.hermes/CyberPersona-hermes`
+**Core principle:** 没有提及就是无限可能性，一旦提及则立刻限定。系统不创造角色，角色通过对话创造自己。
 
-**Core Philosophy: Quantum State (量子态)**
+**Load when:** user says `开始赛博女友`, sends messages in CyberPersona mode, or asks about CyberPersona.
 
-**Core Philosophy: Quantum State (量子态)**
-> 没有提及就是无限可能，一旦提及，则立刻限定。系统不创造角色，角色通过对话创造自己。
+## Commands
 
-**Load this skill when:** user says `开始赛博女友`, sends messages in CyberPersona mode, or asks about the CyberPersona system.
+| Trigger | Action |
+|---------|--------|
+| `开始赛博女友` | Start — restore state or generate profile |
+| `开始赛博女友 cheat on` | Start + enable cheat mode |
+| `退出赛博女友` | Exit — save session summary + state |
+| `我们分手吧` | Breakup — clear all state and memory |
+| `cheat on` / `cheat off` | Toggle cheat mode (info display) |
+| `debug on` / `debug off` | Toggle debug mode |
+| `debug 状态` / `debug 记忆` | View state / memory (debug mode only) |
+| `debug 设置 <dim> <val>` | Modify dimension (debug mode only) |
+| `debug 场景 <name>` | Simulate scenario (debug mode only) |
 
-## Quick Reference
-
-| Action | Command |
-|--------|---------|
-| Start | `开始赛博女友` → run controller → restore state or generate profile |
-| Start (cheat) | `开始赛博女友 cheat on` → 启动并开启 cheat 模式 |
-| Exit | `退出赛博女友` → save session summary → save state → disable mode |
-| Breakup | `我们分手吧` → clear all state and memory |
-| Status | `node src/controller.js status` (includes gamification + image stats) |
-| Save session summary | `node src/controller.js apply-session-summary <json>` |
-
-### Cheat Commands
-
-| Action | Command |
-|--------|---------|
-| Cheat on | `cheat on` → 开启信息展示（回合小结、聊天建议等） |
-| Cheat off | `cheat off` → 关闭信息展示，恢复沉浸模式 |
-
-### Debug Commands
-
-| Action | Command |
-|--------|---------|
-| Debug on | `debug on` → 开启 debug 模式（debug 命令可用） |
-| Debug off | `debug off` → 关闭 debug 模式（debug 命令不可用） |
-| 状态查看 | `debug 状态` → 展示当前内部状态（维度、情绪、记忆、游戏化） |
-| 记忆查看 | `debug 记忆` → 展示所有记忆内容 |
-| 状态修改 | `debug 设置 <维度> <值>` → 修改指定维度（如 `debug 设置 trust 80`） |
-| 场景模拟 | `debug 场景 <场景名>` → 模拟特定场景测试角色反应 |
-| 发语音 | `debug 发语音 <内容>` → 生成语音 + 显示参数 |
-| 发照片 | `debug 发照片` → 生成图片 + 显示 prompt |
-| 发表情 | `debug 发表情 <关键词>` → 搜索贴纸 + 显示参数 |
-| 唱歌 | `debug 唱歌` → 强制语音 + 唱歌模式 |
-
-## Four-Layer Architecture
-
-| Layer | Name | Mutability | Description |
-|-------|------|------------|-------------|
-| L1 | Physical | Immutable | name, age, gender, MBTI, height/weight, appearance |
-| L2 | Personality | Slow calibration (±0.1~0.3) | Big Five: neuroticism/agreeableness/openness/conscientiousness/extraversion |
-| L3 | Relationship | Dynamic, per-turn | trust/security/closeness/neediness/possessiveness |
-| L4 | Memory | Cumulative | revealedFacts/ sessionSummaries/ emotionalMemories |
-
-## L2 — Big Five Personality (0-100)
-
-Generated at character creation. Slowly calibrated each turn (±0.1~0.3).
-
-| Dimension | Key | High | Low |
-|-----------|-----|------|-----|
-| 神经质 | neuroticism | Emotional, sensitive, anxious | Stable, calm, resilient |
-| 宜人性 | agreeableness | Caring, accommodating, empathetic | Independent, blunt, self-protective |
-| 开放性 | openness | Curious, imaginative, experimental | Realistic, stable, cautious |
-| 尽责性 | conscientiousness | Planned, committed, worrisome | Spontaneous, flexible, easygoing |
-| 外向性 | extraversion | Proactive, enthusiastic, talkative | Introverted, quiet, recharging |
-
-**L2 modulation mapping:**
-- neuroticism → all dimensions (amplitude + stress sensitivity)
-- agreeableness → trust + conflict events
-- openness → novelty events
-- conscientiousness → promise events
-- extraversion → behavior only (not direct L3)
-
-## L3 — Relationship Dimensions (0-100, Integer)
-
-| Dimension | Key | Start | Meaning |
-|-----------|-----|-------|---------|
-| 信任感 | trust | 30 | 觉得你靠不靠谱 |
-| 安全感 | security | 30 | 觉得不会被抛弃 |
-| 亲密感 | closeness | 20 | 情感亲近程度 |
-| 依恋度 | neediness | 20 | 多想和你待一起 |
-| 占有欲 | possessiveness | 10 | 对你和别人的敏感度 |
-
-**Level labels:** 0-20 冰点, 21-40 低, 41-60 中, 61-80 高, 81-100 满
-
-## Three-Stage Modulation
+## Turn Flow (每轮对话)
 
 ```
-effective_Δ = raw_Δ_enum × l2_factor × mood_factor
+build-turn-prompt → LLM推理 → apply-turn-result → 多模态投递
 ```
 
-### Stage 1: Enum Delta (防 LLM 数值幻觉)
-
-LLM chooses enum values, NOT integers:
-
-| Enum | Value |
-|------|-------|
-| major_decrease | -10 |
-| minor_decrease | -3 |
-| neutral | 0 |
-| minor_increase | +3 |
-| major_increase | +10 |
-
-**LLM MUST write CoT analysis before choosing delta.** Code layer does ENUM_TO_INT conversion.
-
-### Stage 2: L2 Factor (0.5x ~ 1.5x)
-
-Big Five personality modulates the delta amplitude. Example: high neuroticism amplifies negative deltas.
-
-### Stage 3: Mood Factor
-
-- Positive Δ: `(1 - 0.5 × stress/100)` → high stress weakens positive changes
-- Negative Δ: `(1 + 0.5 × stress/100)` → high stress amplifies negative changes
-
-## Stress System (0-100)
-
-Independent short-term state, NOT part of L3 (relationship).
-
-- Natural decay per turn: `base 3 + (50-neuroticism)/50 + conscientiousness/50`, min 1
-- High neuroticism → slower decay
-- High conscientiousness → slightly slower decay
-- Affects all L3 changes via mood_factor
-
-## Opening Strategies
-
-After character generation, randomly assigned (NOT linked to personality):
-
-| Strategy | Behavior | Collapse Method |
-|----------|----------|-----------------|
-| emotion | Character monologues (碎碎念) | User responds freely, first mention collapses |
-| schrodinger | Character asks "你在干嘛？" | User's answer triggers collapse |
-| observer | No opening message | User speaks first, triggers collapse |
-| activity | Character describes current activity | User reacts, triggers collapse |
-| weather | Character comments on weather/time | User responds, triggers collapse |
-
-**For emotion/schrodinger:** LLM only receives L2 + Stress. Prompt forbids mentioning location/weather/action.
-
-**For observer:** `openingMessage` is empty. Controller shows "她正在在线..."
-
-## revealedFacts Type Classification
-
-| Type | Mutability | Examples |
-|------|------------|----------|
-| setting | Immutable once collapsed | location, occupation, appearance traits |
-| experience | Revisable (with revision history) | experiences, feelings, opinions |
-
-LLM context injection format:
-- setting: plain text
-- experience: `[可修订] <fact>`
-
-## World Sync
-
-### Weather
-- Based on wttr.in curl query, 15-min cache
-- Depends on `revealedMemory.locations.current` (quantum state)
-- If location not collapsed: no weather injected, LLM doesn't fabricate
-
-### Holidays
-- `data/holidays.json`: 16 fixed holidays + 4 lunar holidays
-- Special dates auto-injected into context
-
-### Time Awareness
-- 7 periods: 凌晨(0-5) / 早晨(6-8) / 上午(9-11) / 中午(12-13) / 下午(14-17) / 傍晚(18-19) / 晚上(20-23)
-- Exact hour injected
-- Character naturally perceives time (3am: "你怎么还不睡？")
-
-### Location Quantum State
-- Profile does NOT pre-set location
-- First mention of city → collapses to `revealedMemory.locations.current`
-- Travel → `locations.current` temporarily changes, returns after
-- Return decided by LLM naturally, no timers
-
-## Emotion Depth System
-
-### emotionHistory (shortTermState)
-Last 3 turns of emotion + trigger:
-```json
-{"emotion": "害羞", "trigger": "被夸好看"}
-```
-
-### emotionalMemories (revealedMemory)
-Long-term emotional memories. Added via `memoryUpdate.emotionalMemoriesAdd`:
-```json
-{"event": "他说喜欢我穿红裙子", "emotion": "开心", "significance": "高"}
-```
-
-### moodFactors (shortTermState)
-Auto-calculated background mood factors:
-- `timeOfDay`: based on current hour (7 periods)
-- `chatDuration`: session length
-- `recentEmotionTrend`: from emotionHistory
-
-## State Narrative Translation
-
-`buildStateNarrative()` converts numeric state to natural language for LLM context:
-
-```
-信任感：82/100 — 她很信赖你，愿意分享心事
-安全感：45/100 — 她还有些不确定
-压力：72/100 — 她最近有些焦虑
-```
-
-Functions: `dimToText()`, `stressToText()`, `l2ToText()`, `thresholdToText()`
-
-## Debug 模式
-
-Debug 模式控制调试命令的可用性。默认关闭。
-
-**开关命令：**
-- `debug on` — 开启 debug 模式
-- `debug off` — 关闭 debug 模式
-
-**重置：** 退出赛博女友后自动重置为关闭状态
-
-**状态存储：** `~/.hermes/CyberPersona-hermes/.data/debug-mode.flag`
-
-### Debug 命令列表
-
-#### debug 状态
-展示当前完整的内部状态：
-```
-📊 Debug 状态
-
-【L2 人格 Big Five】
-神经质(N): 65  █████████████░░░░░░░ 65/100
-宜人性(A): 45  █████████░░░░░░░░░░░ 45/100
-开放性(O): 70  ██████████████░░░░░░ 70/100
-尽责性(C): 35  ███████░░░░░░░░░░░░░ 35/100
-外向性(E): 55  ███████████░░░░░░░░░ 55/100
-
-【L3 关系维度】
-信任感: 48 (低)  ████████░░ 48/100
-安全感: 35 (低)  ███████░░░ 35/100
-亲密感: 40 (低)  ████████░░ 40/100
-依恋度: 19 (冰点) ████░░░░░░ 19/100
-占有欲: 5 (冰点)  █░░░░░░░░░ 5/100
-
-【压力】
-压力值: 65  █████████████░░░░░░░ 65/100
-
-【情绪状态】
-当前情绪: <currentEmotion>
-
-【情绪历史】
-1. <emotion> ← <trigger>
-2. <emotion> ← <trigger>
-3. <emotion> ← <trigger>
-
-【记忆】
-已揭示事实: X 条 (setting: X, experience: X)
-情绪记忆: X 条
-
-【游戏化】
-好感度: X (<等级>)
-成就: X/18
-今日任务: X/6
-```
-
-#### debug 设置 <维度> <值>
-维度名称：trust, security, closeness, neediness, possessiveness, stress
-值范围：0-100
-
-#### debug 场景 <场景名>
-```
-debug 场景 被夸奖       → 模拟被真诚夸奖
-debug 场景 吵架         → 模拟发生小冲突
-debug 场景 长时间未聊   → 模拟3天没聊天
-debug 场景 表白         → 模拟用户表白
-debug 场景 吃醋         → 模拟用户提到其他女生
-```
-
-## Full Turn Cycle
-
-### 1. Start CyberPersona
+### Step 1: Build prompt
 
 ```bash
-cd ~/.hermes/CyberPersona-hermes && node src/controller.js 开始赛博女友
+cd ~/.hermes/CyberPersona-hermes
+node scripts/build-turn-prompt.js "用户消息"
 ```
 
-- If state exists → restores, returns profileSummary + lastSummary
-- If no state → returns `need_profile_generation` with prompt for `InitialStatePayload`
+Outputs: prompt file path + context summary.
 
-When entering: **automatically suppress gateway notifications** via flag file `~/.hermes/.suppress_gateway_notify`. Removed on exit/breakup.
+### Step 2: LLM inference
 
-### 1b. First-Time Profile Generation (no state file)
+Use the prompt file from Step 1. Save LLM output to `/tmp/cyber-gf-turn-result.json`.
 
-When there's no existing state, the agent must:
+### Step 3: Apply result
 
-**第一步：运行标准化初始化脚本**
+```bash
+node scripts/apply-turn-result.js
+```
+
+Outputs: `visibleText`, `sendVoiceNow`, `sendImageNow`, `sendGifNow`, `imageWaitText`, `imageFailedText`, etc. State changes are applied automatically.
+
+### Step 4: Deliver (agent executes)
+
+Based on Step 3 output, deliver in this order:
+
+1. **Voice** (if `sendVoiceNow=true`): TTS `visibleText` → send as voice bubble
+2. **Text** (if `sendVoiceNow=false`): send `visibleText` as message
+3. **Sticker** (if `sendGifNow=true`): search + send sticker
+4. **Image wait text** (if `sendImageNow=true`): send `imageWaitText` as transition message
+5. **Image** (async, if `sendImageNow=true`): generate + send image
+
+**⚠️ sendVoiceNow=true 时只发语音，不发 visibleText 文字。**
+
+## First-Time Init (no state file)
 
 ```bash
 cd ~/.hermes/CyberPersona-hermes && node scripts/init-cyber-persona.js
 ```
 
-输出包含：
-- 人格原型
-- 开场策略
-- 开场白
-- 外貌标签
-- 声音描述
-- 结果写入 `/tmp/cyber-gf-init-result.json`
+Then parallel:
+1. **证件照**: image-api generate (appearance tags from seed output)
+2. **语音样本**: mimo-tts voicedesign (voiceStyle + openingMessage from seed)
 
-**第二步：并行生成两个产物**
+Send to user: 证件照 → 语音样本 → 开场白。Then show profile summary.
 
-并行执行以下两个任务：
-
-**2.1 生成证件照**
-```bash
-source ~/.hermes/.env && export IMAGE_API_KEY="***" && export IMAGE_API_BASE="$IMAGE_API_BASE"
-python3 ~/.hermes/skills/image-api/scripts/image_api.py \
-  --json --size 1024x1536 --quality high --format png --moderation low \
-  "Asian female, <appearance tags from seed>, portrait photo, upper body, soft lighting, looking at camera"
-```
-
-**2.2 生成语音样本**
-```bash
-source ~/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$MIMO_BASE_URL"
-python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts_voicedesign.py \
-  --context "<voiceStyle from seed>" \
-  --text "<openingMessage from seed>" \
-  --output /tmp/cyber-gf-voice.wav
-ffmpeg -y -i /tmp/cyber-gf-voice.wav -c:a libopus -b:a 32k /tmp/cyber-gf-voice.ogg
-```
-
-**第三步：发送给用户**
-
-按顺序发送：
-1. **证件照**：使用 `send_message(message="MEDIA:/path/to/photo.png", target="telegram")`
-2. **语音样本**：使用 `send_message(message="MEDIA:/tmp/cyber-gf-voice.ogg", target="telegram")`
-3. **开场白**：使用 `send_message(message="<openingMessage>", target="telegram")`
-<appearance description>
-
-【声音】
-<voice description>
-
-【开场策略】
-<emotion / schrodinger / observer>
-
-【关系状态】
-好感度: 0 (陌生 😐)
-信任感: 30 (低)
-安全感: 30 (低)
-亲密感: 20 (冰点)
-依恋度: 20 (冰点)
-占有欲: 10 (冰点)
-
-【游戏化】
-成就: 0/18
-今日任务: 0/6
-```
-
-### 2. User Sends a Message → Generate Turn
-
-**标准化 turn 流程（推荐）：**
+## Exit Flow
 
 ```bash
-cd ~/.hermes/CyberPersona-hermes
+# 1. Save session summary
+node src/controller.js apply-session-summary '{"summary":"摘要","keyEvents":[],"emotionalTone":""}'
 
-# Step 1: 获取 prompt
-node scripts/build-turn-prompt.js "你在干嘛呀？"
-# 输出: prompt 文件路径 + 上下文摘要
-
-# Step 2: 调用 LLM（由 Agent 执行）
-# 使用 Step 1 输出的 prompt 文件调用 LLM
-# 将 LLM 输出保存到 /tmp/cyber-gf-turn-result.json
-
-# Step 3: 应用 turn result
-node scripts/apply-turn-result.js
-# 输出: visibleText、sendVoiceNow、sendImageNow 等
-
-# Step 4: 发送回复（由 Agent 执行）
-# 根据 Step 3 的输出决定发送什么
+# 2. Exit
+node src/controller.js 退出赛博女友
 ```
 
-**手动方式（高级）：**
+Remove `~/.hermes/.suppress_gateway_notify` flag file on exit.
 
-**Step A: Get turn context payload**
-```bash
-cd ~/.hermes/CyberPersona-hermes && node src/controller.js turn-payload "<user message>"
-```
+## Cheat Mode
 
-Returns: full context JSON including:
-- `profile` — character info + `personalitySettings`, `sessionSummaries`
-- `dynamicState` — 5 integer dimensions
-- `shortTermState` — `stress`, `emotionHistory`, `moodFactors`
-- `revealedMemory` — `revealedFacts` (with type), `emotionalMemories`, `locations`
-- `worldContext` — `weather`, `holiday`, `timeOfDay`, `hour`
-- `stateNarrative` — natural language translation of state
-- `recentContext`, `userMessage`
+Default off. Toggle with `cheat on`/`cheat off` or start with `开始赛博女友 cheat on`.
 
-**Step B: Generate TurnResultPayload as the character**
+**Cheat ON:** Show round summaries (state changes, emotion shifts, suggestions) + detailed exit summary.
+**Cheat OFF:** Only deliver character responses. Start: `<name> 已上线 💕`. Exit: `已退出赛博女友模式 💕`.
 
-Using the context from Step A, generate a JSON response:
+## TurnResultPayload (LLM output format)
+
 ```json
 {
-  "visibleText": "",
-  "currentEmotion": "",
+  "visibleText": "角色回复文字",
+  "currentEmotion": "当前情绪",
   "sendVoiceNow": false,
   "sendImageNow": false,
-  "imagePrompt": "",
-  "imageWaitText": "",
-  "imageFailedText": "",
+  "imagePrompt": "生图prompt",
+  "imageWaitText": "生图过渡台词",
+  "imageFailedText": "生图失败找补台词",
   "useReferencePhoto": false,
   "imageCaption": "",
   "sendGifNow": false,
-  "gifKeyword": "",
-  "reasoning": "CoT analysis before choosing deltas",
+  "gifKeyword": "贴纸关键词",
+  "reasoning": "CoT推理（必填，先于delta选择）",
   "stateDelta": {
     "trust": "neutral",
     "security": "minor_increase",
@@ -437,295 +138,46 @@ Using the context from Step A, generate a JSON response:
     "emotionalMemoriesAdd": [],
     "lastSummary": ""
   },
-  "__userMessage": ""
+  "__userMessage": "原始用户消息"
 }
 ```
 
-**Key changes from v8.0:**
-- ❌ `stateDelta` integer values — NOW enum strings
-- ❌ `voiceTendency` — REMOVED (merged into closeness)
-- ✅ `reasoning` — CoT analysis required before delta selection
-- ✅ `stressDelta` — enum string for stress change
-- ✅ `stateDelta` — enum strings: major_decrease/minor_decrease/neutral/minor_increase/major_increase
+**stateDelta/stressDelta enum values:** `major_decrease` | `minor_decrease` | `neutral` | `minor_increase` | `major_increase`
 
-Save to `/tmp/cyber-gf-turn-result.json` then apply.
+## Delivery Details
 
-**Step C: Apply turn result**
+### TTS (语音)
+- **日常**: `mimo_tts_voiceclone.py --voice-file data/voice-sample.wav`
+- **唱歌**: `mimo_tts.py --voice "茉莉"` (clone 不支持唱歌)
+- **超时**: 60s，超时降级纯文本
+- 参考 mimo-v2-5-tts skill
+
+### Image (图片)
+- `useReferencePhoto=true` → image-api edit 模式（有角色出镜）
+- `useReferencePhoto=false` → image-api generate 模式
+- 参考 image-api skill，timeout ≥ 180s
+
+### Sticker (贴纸)
 ```bash
-cd ~/.hermes/CyberPersona-hermes && node src/controller.js apply-turn-payload "$(cat /tmp/cyber-gf-turn-result.json)"
-```
-
-**Step D: Generate TTS + send voice (if sendVoiceNow=true)**
-
-Agent calls mimo-tts skill scripts directly. TTS text = `visibleText`:
-
-**日常语音（clone 模式）：**
-```bash
-source ~/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$XIAOMI_BASE_URL"
-python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts_voiceclone.py \
-  --voice-file ~/.hermes/CyberPersona-hermes/.data/voice-sample.wav \
-  --context "自然语言风格控制" \
-  --text "visibleText的内容" \
-  --output /tmp/cyber-gf-tts-output.wav
-ffmpeg -y -i /tmp/cyber-gf-tts-output.wav -c:a libopus -b:a 32k /tmp/cyber-gf-tts-output.ogg
-```
-
-**唱歌（preset 模式，clone 不支持唱歌）：**
-```bash
-source ~/.hermes/.env && export MIMO_API_KEY="***" && export MIMO_BASE_URL="$XIAOMI_BASE_URL"
-python3 ~/.hermes/skills/mimo-v2-5-tts/scripts/mimo_tts.py \
-  --voice "茉莉" \
-  --text "(唱歌)完整歌词内容" \
-  --output /tmp/cyber-gf-tts-output.wav
-ffmpeg -y -i /tmp/cyber-gf-tts-output.wav -c:a libopus -b:a 32k /tmp/cyber-gf-tts-output.ogg
-```
-
-Then send as Telegram voice bubble:
-```
-send_message(message="MEDIA:/tmp/cyber-gf-tts-output.ogg", target="telegram")
-```
-
-**Step E: Send sticker (if sendGifNow=true)**
-```bash
-STICKER_URL=$(curl -s -m 5 "https://api.tangdouz.com/a/biaoq.php?return=json&nr=$(python3 -c 'import urllib.parse; print(urllib.parse.quote("gifKeyword的值"))')" | python3 -c "import json,sys,random; data=json.load(sys.stdin); print(random.choice(data)['thumbSrc'])")
+STICKER_URL=$(curl -s -m 5 "https://api.tangdouz.com/a/biaoq.php?return=json&nr=$(python3 -c 'import urllib.parse; print(urllib.parse.quote("gifKeyword"))')" | python3 -c "import json,sys,random; data=json.load(sys.stdin); print(random.choice(data)['thumbSrc'])")
 curl -sL "$STICKER_URL" -o /tmp/cyber-gf-sticker.jpg
-send_message(message="MEDIA:/tmp/cyber-gf-sticker.jpg", target="telegram")
 ```
 
-**Step F: Send image (if sendImageNow=true)**
-
-Check state for generated image, then send via Telegram.
-
-**沉浸感规则：当 sendVoiceNow=true 时，只发送语音，不要重复发送 visibleText 的文字消息。**
-
-### 3. Exit CyberPersona
-
-**Before exit, generate session summary:**
-```bash
-cd ~/.hermes/CyberPersona-hermes && node src/controller.js apply-session-summary '{"summary":"对话摘要","keyEvents":["事件1"],"emotionalTone":"温馨"}'
-```
-
-Then exit:
-```bash
-cd ~/.hermes/CyberPersona-hermes && node src/controller.js 退出赛博女友
-```
-
-When exiting: **remove gateway notification suppression flag**.
-
-## Modules (7 — all integrated)
-
-| Module | File | Integration Point |
-|--------|------|-------------------|
-| Config | `src/config.js` | Configuration loading |
-| State | `src/state.js` | State CRUD + L2/L3 modulation + stress + emotionHistory + moodFactors |
-| Profile | `src/profile.js` | Initial profile validation (Big Five + 5 L3 dims) |
-| Turn | `src/turn.js` | Turn output validation (enum deltas, stressDelta) |
-| Prompts | `src/prompts.js` | LLM prompt construction |
-| Gamification | `src/gamification.js` | Achievements, affection, daily tasks, collections |
-| Controller | `src/controller.js` | Main orchestrator, CLI, delivery, world context |
-
-## Gamification System
-
-**Achievements (18):** first_conversation, ten_conversations, hundred_conversations, first_voice, voice_master, first_selfie, photo_collector, first_heartbeat, trust_fall, soulmate, one_week, one_month, one_year, night_owl, early_bird, all_night, nickname_collector, memory_keeper
-
-**Achievement conditions:** use integer thresholds (>= 80)
-
-**Affection levels:** 陌生(0-100) → 认识(101-300) → 友好(301-500) → 亲密(501-700) → 心动(701-900) → 恋人(901-1000)
-
-**Affection gain:** daily_chat(+5), voice_message(+10), photo_share(+15), deep_conversation(+20), emotional_support(+25), special_event(+30), achievement_unlock(+50)
-
-**Affection deduction (v9.1.1):** Based on `stateDelta` from turn result:
-- `major_decrease` ≥ 2 dimensions → -30 (relationship collapse)
-- `negative` (any decrease) ≥ 3 dimensions → -15 (relationship conflict)
-- `major_decrease` ≥ 1 dimension → -8 (relationship setback)
-
-**Daily tasks:** 早安问候, 晚安问候, 分享心情, 语音聊天, 照片分享, 深入对话
-
-## Key Pitfalls
-
-1. **Voice delivery must use `send_message` tool**, not inline `MEDIA:` in response text.
-
-2. **TTS uses mimo-v2-5-tts skill** — Agent calls MiMo TTS Python scripts directly. TTS text = `visibleText`.
-
-3. **TTS Architecture — Voice Design→Clone Workflow:**
-   - **Character creation:** voiceDescription → `mimo_tts_voicedesign.py` → voice sample → `profile.voiceSamplePath`
-   - **Every voice turn:** `mimo_tts_voiceclone.py --voice-file <sample>` → consistent voice
-   - **Singing:** Clone does NOT support singing. Fallback: `mimo_tts.py --voice "茉莉" --text "(唱歌)歌词"`
-
-4. **State file**: `~/.hermes/CyberPersona-hermes/data/state.json` (version 3).
-
-5. **Image generation**: Agent calls image-api skill Python scripts directly. Use: `python3 ~/.hermes/skills/image-api/scripts/image_api.py --json ...`. 15-30s for generate, 60-180s for edits. **Use timeout >= 180s.**
-
-6. **Image API failure modes & retry strategy:**
-   - **Timeout (120s+)**: API can hang. Set terminal timeout to 180s.
-   - **JSON decode error**: Retry with shorter prompt.
-   - **Edit API failure**: Fallback to generate API.
-   - **Retry order**: generate → generate with shorter prompt → edit with reference photo.
-
-7. **Gateway notification suppression** — Uses flag file `~/.hermes/.suppress_gateway_notify`.
-
-8. **Singing (唱歌)** — Only with preset voices (`mimo-v2.5-tts`). Voice clone does NOT support singing.
-
-9. **`gamification.state` is undefined in controller scope** — The gamification module exports functions, NOT a `state` object. Use `const state = loadState(); ... applyStateDelta(state, ...); saveState(state);`.
-
-10. **Enum delta validation** — `stateDelta` values MUST be enum strings (major_decrease/minor_decrease/neutral/minor_increase/major_increase). Code rejects integers.
-
-11. **Stress is NOT part of L3** — It's independent short-term state. Don't put stress in `dynamicState`.
-
-12. **revealedFacts type** — `setting` type is immutable once collapsed. `experience` type is revisable with revision history.
-
-13. **Location quantum state** — Profile does NOT pre-set location. `revealedMemory.locations.current` starts as null. First mention of city collapses it.
-
-14. **World context depends on location collapse** — Weather is only injected when `locations.current` is non-null. Time and holidays are always injected.
-
-15. **Opening strategy is random** — NOT linked to personality. Don't infer personality from opening strategy.
-
-16. **Always verify state before processing a turn** — Check `profile.coreSummary` non-empty and `mode.enabled === true`.
-
-17. **Context compaction can break the runtime loop** — After compaction, re-enter with `开始赛博女友`.
-
-18. **L2 factor: N must NOT appear twice** — `baseFactor` already includes neuroticism. The inner formula for neediness/possessiveness must NOT add `n` again, or it creates quadratic amplification (N=90 → factor 1.89 instead of 1.26). This was fixed in v9.1.1.
-
-19. **Gamification: negative deltas must deduct affection** — `recordInteraction` receives `stateDelta` from the turn result. If multiple dimensions show `major_decrease`, affection is deducted (-8 to -30). Without this, affection rises even when the relationship is tanking.
-
-20. **`analysis` is a required turn field** — LLM must write CoT reasoning before choosing enum deltas. `validateTurnOutput` rejects turns missing the `analysis` field.
-
-21. **Quantum state: code-layer enforcement** — `validateInitialProfile` rejects non-empty `revealedFacts`/`emotionalMemories`/`importantEvents`. Additionally, `applyInitialStatePayload` force-clears these arrays as a double safety net. LLM cannot leak facts into initial state.
-
-22. **Timezone: always use Asia/Shanghai** — `getTimeOfDay()` uses `toLocaleString("en-US", {timeZone: "Asia/Shanghai"})` to ensure correct time perception regardless of server location.
-
-23. **World sync time accuracy** — `getTimeOfDay()` uses the **user's configured timezone** (not server time). If the user is in Asia/Shanghai but the server is in UTC, the character's time perception follows the user. Check `config.timezone` or default to `Asia/Shanghai`.
-
-24. **recentContext: 10 messages, not 3** — `getRecentContext(limit=10)` and `slice(-10)` give the LLM 5 full turns of context. 恋爱模拟需要上下文拉扯，3 条太短会导致"鱼的记忆"。
-
-25. **State version migration** — `createEmptyState()` has `version: 3`. `repairState()` auto-migrates v1→v2→v3: v2 removes `voiceTendency`, renames `intimacy→closeness`/`attachment→neediness`/`jealousy→possessiveness`; v3 ensures `personalitySettings` + `stress` exist and adds Big Five defaults.
-
-## Character Response Guidelines (v9.2.0)
-
-When generating TurnResultPayload:
-- **真实感优先于讨好感** — authentic over pleasing
-- **上下文驱动推理，不执行规则** — "这个人+这时候+怎么回复"
-- **CoT first** — Write reasoning BEFORE choosing enum deltas
-- **Enum deltas** — Use major_decrease/minor_decrease/neutral/minor_increase/major_increase
-- **stressDelta** — Separate from relationship deltas
-- `sendVoiceNow=true` for emotional moments, not every turn
-- `sendGifNow=true` for expression reactions
-- `lastSummary` must be a concise relationship snapshot
-- Check `revealedFacts` before introducing past facts (setting = immutable, experience = revisable)
-- Check `emotionHistory` for emotional continuity
-- Check `sessionSummaries` for cross-session memory
-- Check `worldContext` for weather/holiday/time awareness
-- Check `stateNarrative` for natural language state description
-- **Emotion expression:** 害羞→短句省略号, 开心→感叹号emoji, 低落→长句沉默, 生气→直接反问
-- **User emotion perception:** notice user's emotional tone and adjust
-
-## Agent Behavior Consistency
-
-**数据来源原则：** 所有小结和总结中的数字、情绪转变必须从系统实际数据读取，不能自由发挥。
-- 状态变化：从 `apply-turn-result.js` 返回结果或 `data/state.json` 读取
-- 情绪转变：从 `emotionHistory` 数组读取
-- 好感度/成就：从 gamification 状态读取
-
-### Cheat 模式
-
-Cheat 模式控制三阶段信息展示（回合小结、聊天建议、详细退出总结）的开关。默认关闭。
-
-**开启方式：**
-- `开始赛博女友 cheat on` — 开始时就开启
-- 对话中输入 `cheat on` — 随时开启
-
-**关闭方式：**
-- 对话中输入 `cheat off` — 随时关闭
-
-**重置：** 退出赛博女友后自动重置为关闭状态
-
-**状态存储：** `~/.hermes/CyberPersona-hermes/.data/cheat-mode.flag`
-
-**Cheat 开启时展示的内容：**
-- 开始信息：上次回顾 + 当前关系状态
-- 回合小结：状态变化 + 情绪转变 + 动态评价 + 聊天建议
-- 退出总结：完整详细总结
-
-**Cheat 关闭时：**
-- 开始：只显示 `<角色名> 已上线 💕`（observer 策略显示"她正在线上..."）
-- 回合：只发送角色回复（文字/语音/图片/贴纸），不附带任何小结
-- 退出：只显示 `已退出赛博女友模式 💕`
-
-### 1. 开始信息（进入模式时）
-
-**Cheat 开启时发送：**
-```
-赛博女友模式已开启 ✨
-
-<角色名> 已上线 💕
-
-【上次回顾】
-<从 profile.sessionSummaries 和 revealedMemory.lastSummary 提取>
-
-【当前关系状态】
-好感度: X (<等级>)
-信任感: X (<等级>)
-安全感: X (<等级>)
-亲密感: X (<等级>)
-依恋度: X (<等级>)
-占有欲: X (<等级>)
-
-【压力】
-压力值: X/100
-```
-
-**Cheat 关闭时发送：**
-```
-<角色名> 已上线 💕
-```
-
-### 2. 回合小结（每轮对话后）
-
-**Cheat 开启时：**
-```
-📊 回合小结
-
-状态变化： <维度> <变化量>（<旧值>→<新值>），...
-情绪转变： <上一轮情绪> → <本轮情绪>（<触发原因>）
-压力变化： <旧值> → <新值>
-动态： <对这轮对话的评价>
-
-💡 聊天建议：<基于当前状态的回复方向>
-```
-
-### 3. 退出总结（退出模式时）
-
-**Cheat 开启时发送：**
-```
-✅ 已退出赛博女友模式
-
-【本次 Session】
-- 🎭 角色： <名字> — <简介>
-- 💬 回合数： X 轮对话
-- 📊 关系进展：
-  - 信任感 X → X
-  - 安全感 X → X
-  - 亲密感 X → X
-  - 依恋度 X → X
-  - 占有欲 X → X
-- 😰 压力： X → X
-- 💗 好感度： X → X（<等级>）
-- 🏆 成就： X/18
-
-【对话评价】
-<整体评价>
-
-【记忆更新】
-<session-summary 保存结果>
-```
-
-**Cheat 关闭时发送：**
-```
-已退出赛博女友模式 💕
-```
-
-## Dependency Skill Sources
-
-- **mimo-v2-5-tts**: [XiaomiMiMo/MiMo-Skills](https://github.com/XiaomiMiMo/MiMo-Skills) — install via `npx skills add XiaomiMiMo/MiMo-Skills` or git clone + symlink. Requires `MIMO_API_KEY`.
-- **image-api**: [harrylarryxyz/image-api](https://github.com/harrylarryxyz/image-api) — 通用图片生成与编辑，支持任意 OpenAI 兼容 provider。安装：`git clone https://github.com/harrylarryxyz/image-api.git ~/.hermes/skills/image-api`。需要 `IMAGE_API_KEY` + `IMAGE_API_BASE` 环境变量。
-- **mood-sticker**: [clawhub.ai/chensanle/sticker](https://clawhub.ai/chensanle/sticker) — Hermes skill bundle install. Free, no API key.
+## Pitfalls
+
+1. **sendVoiceNow=true 时不发文字** — 语音替代文字，不要两边都发
+2. **reasoning 必填** — LLM 必须先写 CoT 再选 delta，否则校验拒绝
+3. **stateDelta 只接受 enum 字符串** — 不接受整数
+4. **stress 不属于 L3** — 独立短期状态，不放 dynamicState
+5. **setting 类 revealedFacts 不可变** — 一旦坍缩不能修改
+6. **时区: Asia/Shanghai** — 不管服务器在哪，时间感知跟用户走
+7. **上下文 10 条** — recentContext 最近 10 条消息，不要截断到 3
+8. **context compaction 后重新进入** — 发 `开始赛博女友`
+9. **imageWaitText 和 visibleText 不拼接** — 各自独立功能
+10. **gamification 没有 state 对象** — 用 `loadState()` + `applyStateDelta()` + `saveState()`
+
+## Dependency Skills
+
+- **mimo-v2-5-tts**: 语音合成，需要 `MIMO_API_KEY`
+- **image-api**: 图片生成/编辑，需要 `IMAGE_API_KEY` + `IMAGE_API_BASE`
+- **mood-sticker**: 表情包搜索，免 API key
