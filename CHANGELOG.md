@@ -29,7 +29,7 @@
 #### 角色信息模板（characterCard）
 - 新增 `characterCard` 作为角色数据的唯一数据源
 - 创世阶段（脚本生成）：`systemBase`（Big Five + archetype）、`appearance`（含 bodyType）、`voice`
-- 初始化阶段（LLM 生成）：`signatureLine`（签名语）
+- ~~初始化阶段（LLM 生成）：`signatureLine`（签名语）~~ → v10.1.0 删除
 - 量子态字段：`identity`、`physicalTraits`、`personalitySelfDescription`、`preferences`、`innerWorld`、`habits`、`memories`
 - 所有量子态字段使用动态键值对（Dynamic KV），不再预设固定插槽
 - 版本迁移：v2→v3 自动迁移，从旧 profile/revealedMemory 映射到 characterCard
@@ -52,9 +52,9 @@
 - memories 特殊处理：events + milestones + gifts 总和计数
 
 #### 初始化流程简化
-- `buildInitialProfileAgentPrompt` 大幅简化：LLM 只需生成 `signatureLine` + `openingMessage` + `emotionalProfile.baseline`
+- ~~`buildInitialProfileAgentPrompt` 大幅简化：LLM 只需生成 `signatureLine` + `openingMessage` + `emotionalProfile.baseline`~~ → v10.1.0 全部删除
 - 种子数据作为上下文传入 prompt，LLM 不再重复生成外貌/声音/性格
-- `buildInitialState(seed, llmOutput)` 从种子直接填充 characterCard
+- ~~`buildInitialState(seed, llmOutput)` 从种子直接填充 characterCard~~ → v10.1.0 简化为 `buildInitialState(seed)`
 - `buildStartPayload(seedData)` 接受种子数据参数
 
 #### 回合系统适配

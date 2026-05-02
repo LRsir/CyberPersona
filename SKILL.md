@@ -1,7 +1,7 @@
 ---
 name: cyber-persona
 description: "Run CyberPersona (赛博女友) roleplay mode — quantum-state character generation, Big Five personality, 5-dimension relationship system, stress modulation, enum-based state deltas, three opening strategies, world sync (weather/holidays/time), TTS voice, image, sticker delivery on Telegram."
-version: 10.0.0
+version: 10.1.0
 metadata:
   hermes:
     tags: [cyberpersona, roleplay, tts, telegram, voice, image, gamification, emotion, sticker, quantum-state, big-five]
