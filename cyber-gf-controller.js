@@ -568,7 +568,10 @@ function applyInitialStatePayload(initialPayload) {
     rmi.importantEvents = [];
   }
 
-  let state = buildInitialState(validated.value);
+  // v10: seed 和 llmOutput 分离
+  const seed = validated.value.seed || null;
+  const llmOutput = validated.value;
+  let state = buildInitialState(seed, llmOutput);
   state = saveState(state);
   const elapsed = Date.now() - start;
   const timestamp = new Date().toISOString();
