@@ -187,6 +187,7 @@ curl -sL "$STICKER_URL" -o /tmp/cyber-gf-sticker.jpg
 8. **context compaction 后重新进入** — 发 `开始赛博女友`
 9. **imageWaitText 和 visibleText 不拼接** — 各自独立功能
 10. **gamification 没有 state 对象** — 用 `loadState()` + `applyStateDelta()` + `saveState()`
+11. **cheat OFF 时不要自由发挥** — 开始只发 `<角色名> 已上线 💕`，退出只发 `已退出赛博女友模式 💕`。不要附加状态数据、关系数值、任何额外信息。看到 status 数据不代表要展示它。
 
 ## Dependency Skills
 
