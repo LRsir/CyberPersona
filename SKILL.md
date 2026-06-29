@@ -10,7 +10,7 @@ metadata:
 
 # CyberPersona Agent Workflow
 
-**Project:** `~/.hermes/CyberPersona-hermes`
+**Project:** `~/.hermes/profiles/cybergf/CyberPersona`
 **Core principle:** 没有提及就是无限可能性，一旦提及则立刻限定。系统不创造角色，角色通过对话创造自己。
 
 **Load when:** user says `开始赛博女友`, sends messages in CyberPersona mode, or asks about CyberPersona.
@@ -38,7 +38,7 @@ build-turn-prompt → LLM推理 → apply-turn-result → 多模态投递
 ### Step 1: Build prompt
 
 ```bash
-cd ~/.hermes/CyberPersona-hermes
+cd ~/.hermes/profiles/cybergf/CyberPersona
 node scripts/build-turn-prompt.js "用户消息"
 ```
 
@@ -82,7 +82,7 @@ Outputs: `visibleText`, `sendVoiceNow`, `sendImageNow`, `sendGifNow`, `imageWait
 ## First-Time Init (no state file)
 
 ```bash
-cd ~/.hermes/CyberPersona-hermes && node scripts/init-cyber-persona.js
+cd ~/.hermes/profiles/cybergf/CyberPersona && node scripts/init-cyber-persona.js
 ```
 
 Then parallel:
